@@ -320,7 +320,7 @@ const App: React.FC = () => {
                 </label>
                 <textarea
                   className="flex-1 min-h-[12rem] w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200/50 dark:border-slate-800/50 rounded-lg focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 focus:border-transparent outline-none resize-none text-sm leading-relaxed placeholder:text-slate-400 dark:placeholder:text-slate-600"
-                  placeholder="금요일까지 보고서 제출"
+                  placeholder="여기에 입력"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                 />
