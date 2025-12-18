@@ -455,33 +455,43 @@ const App: React.FC = () => {
                 <span className="text-xs text-slate-500 dark:text-slate-400">
                   {tasks.length}개
                 </span>
-                {authState.isAuthenticated && todoLists.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedListId}
-                      onChange={(e) => setSelectedListId(e.target.value)}
-                      className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
-                    >
-                      {todoLists.map((list) => (
-                        <option key={list.id} value={list.id}>
-                          {list.displayName}
-                        </option>
-                      ))}
-                    </select>
+                <div className="flex items-center gap-2">
+                  {authState.isAuthenticated && todoLists.length > 0 ? (
+                    <>
+                      <select
+                        value={selectedListId}
+                        onChange={(e) => setSelectedListId(e.target.value)}
+                        className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
+                      >
+                        {todoLists.map((list) => (
+                          <option key={list.id} value={list.id}>
+                            {list.displayName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={handleSendToTodo}
+                        disabled={isSending}
+                        className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 disabled:bg-slate-400 text-white dark:text-slate-900 rounded-lg transition-colors"
+                        title={isSending ? "전송 중..." : "To Do에 추가"}
+                      >
+                        {isSending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </button>
+                    </>
+                  ) : (
                     <button
-                      onClick={handleSendToTodo}
-                      disabled={isSending}
-                      className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 disabled:bg-slate-400 text-white dark:text-slate-900 rounded-lg transition-colors"
-                      title={isSending ? "전송 중..." : "To Do에 추가"}
+                      onClick={handleLogin}
+                      className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg transition-colors flex items-center gap-1"
+                      title="Microsoft 로그인"
                     >
-                      {isSending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
+                      <LogIn className="w-4 h-4" />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               <div className="space-y-3">
