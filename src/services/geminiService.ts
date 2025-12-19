@@ -123,36 +123,62 @@ ${text}`;
      parts.push({ text: promptText });
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: { parts },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-            type: Type.ARRAY,
-            items: taskItemSchema,
+  // 재시도 로직 (최대 3회, exponential backoff)
+  const maxRetries = 3;
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: { parts },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+              type: Type.ARRAY,
+              items: taskItemSchema,
+          },
+          systemInstruction: "당신은 Microsoft To-Do 전문 비서입니다. 채팅이나 이미지에서 할 일을 추출하여 To-Do 항목으로 만드는 것이 임무입니다. 반드시 제목에 태그(#일정/#기한/#작업 + 추가태그)를 포함하고, 기한은 항상 미래 날짜여야 하며, 알림은 기한 당일 오전 7시 30분으로 설정하세요. 원문 내용은 그대로 노트에 옮기고, 중요도는 기본적으로 'low'입니다.",
         },
-        systemInstruction: "당신은 Microsoft To-Do 전문 비서입니다. 채팅이나 이미지에서 할 일을 추출하여 To-Do 항목으로 만드는 것이 임무입니다. 반드시 제목에 태그(#일정/#기한/#작업 + 추가태그)를 포함하고, 기한은 항상 미래 날짜여야 하며, 알림은 기한 당일 오전 7시 30분으로 설정하세요. 원문 내용은 그대로 노트에 옮기고, 중요도는 기본적으로 'low'입니다.",
-      },
-    });
+      });
 
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("Gemini로부터 데이터를 받지 못했습니다");
+      const jsonText = response.text;
+      if (!jsonText) throw new Error("Gemini로부터 데이터를 받지 못했습니다");
 
-    const results = JSON.parse(jsonText);
+      const results = JSON.parse(jsonText);
 
-    // Transform to TaskDetails format
-    return results.map((item: any): TaskDetails => ({
-      title: item.title,
-      body: item.body,
-      dueDateTime: item.dueDateTime || undefined,
-      importance: item.importance || 'normal',
-      reminderDateTime: item.reminderDateTime || undefined,
-      categories: item.categories || [],
-    }));
-  } catch (error) {
-    console.error("Gemini 분석 오류:", error);
-    throw error;
+      // Transform to TaskDetails format
+      return results.map((item: any): TaskDetails => ({
+        title: item.title,
+        body: item.body,
+        dueDateTime: item.dueDateTime || undefined,
+        importance: item.importance || 'normal',
+        reminderDateTime: item.reminderDateTime || undefined,
+        categories: item.categories || [],
+      }));
+    } catch (error: any) {
+      lastError = error;
+      console.error(`Gemini 분석 오류 (시도 ${attempt + 1}/${maxRetries}):`, error);
+
+      // 503 오류 (서비스 과부하)인 경우 재시도
+      const isOverloaded = error?.status === 503 || 
+                          error?.code === 503 ||
+                          error?.message?.includes('overloaded') ||
+                          error?.message?.includes('UNAVAILABLE');
+
+      if (isOverloaded && attempt < maxRetries - 1) {
+        // Exponential backoff: 1초, 2초, 4초
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`${delay}ms 후 재시도...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // 재시도 불가능한 오류이거나 최대 재시도 횟수 초과
+      throw error;
+    }
   }
+
+  // 모든 재시도 실패
+  throw lastError || new Error("분석에 실패했습니다.");
 };

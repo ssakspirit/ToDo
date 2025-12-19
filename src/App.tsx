@@ -268,9 +268,21 @@ const App: React.FC = () => {
 
       setInputText('');
       setAttachments([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrorMsg('내용을 분석하는 중 오류가 발생했습니다. 다시 시도해주세요.');
+      
+      // 503 오류 (서비스 과부하)에 대한 특별한 메시지
+      const isOverloaded = err?.status === 503 || 
+                          err?.code === 503 ||
+                          err?.message?.includes('overloaded') ||
+                          err?.message?.includes('UNAVAILABLE');
+      
+      if (isOverloaded) {
+        setErrorMsg('AI 서비스가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.');
+      } else {
+        setErrorMsg('내용을 분석하는 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
+      
       setStatus(AnalysisStatus.ERROR);
     }
   };
