@@ -13,6 +13,12 @@ const getApiKeys = (): string[] => {
 const apiKeys = getApiKeys();
 let currentKeyIndex = 0;
 
+// 디버깅: API 키 개수 확인
+console.log(`[Gemini Service] 로드된 API 키 개수: ${apiKeys.length}`);
+if (apiKeys.length > 0) {
+  console.log(`[Gemini Service] 첫 번째 키: ${apiKeys[0].substring(0, 20)}...`);
+}
+
 // 현재 API 키 가져오기
 const getCurrentApiKey = (): string => {
   if (apiKeys.length === 0) {
@@ -171,9 +177,16 @@ ${text}`;
   // 재시도 로직 (모든 API 키를 시도 + exponential backoff)
   // 429 오류의 경우 모든 키를 시도하고, 다른 오류는 최대 3회 재시도
   const maxRetries = Math.max(apiKeys.length, 3); // 키 개수와 3 중 큰 값
+  
+  console.log(`[Gemini Service] 분석 시작 - 사용 가능한 키: ${apiKeys.length}개, 최대 재시도: ${maxRetries}회`);
+  
   let lastError: any = null;
   let currentAttemptKeyIndex = currentKeyIndex;
   let triedKeys = new Set<number>(); // 시도한 키 추적
+  
+  if (apiKeys.length === 0) {
+    throw new Error('Gemini API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.');
+  }
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -202,6 +215,10 @@ ${text}`;
       if (!jsonText) throw new Error("Gemini로부터 데이터를 받지 못했습니다");
 
       const results = JSON.parse(jsonText);
+
+      // 성공 시 다음 키로 전환 (라운드 로빈)
+      currentKeyIndex = (currentAttemptKeyIndex + 1) % apiKeys.length;
+      console.log(`[Gemini Service] 분석 성공! 다음 요청은 키 ${currentKeyIndex + 1}/${apiKeys.length}부터 시작`);
 
       // Transform to TaskDetails format
       return results.map((item: any): TaskDetails => ({
@@ -237,6 +254,8 @@ ${text}`;
           
           if (nextKeyIndex !== -1) {
             currentAttemptKeyIndex = nextKeyIndex;
+            // 전역 인덱스도 업데이트하여 다음 요청에 반영
+            currentKeyIndex = nextKeyIndex;
             console.log(`할당량 초과로 API 키 전환 (키 ${currentAttemptKeyIndex + 1}/${apiKeys.length})`);
             // 짧은 대기 후 재시도
             await new Promise(resolve => setTimeout(resolve, 500));
