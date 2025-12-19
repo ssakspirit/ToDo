@@ -105,6 +105,8 @@ npm run dev
 
 ### 5. 빌드 및 배포
 
+#### 로컬 빌드
+
 ```bash
 # 프로덕션 빌드
 npm run build
@@ -113,14 +115,113 @@ npm run build
 npm run preview
 ```
 
-**배포 시 주의사항:**
-- Azure AD 앱 등록의 "리디렉션 URI"에 배포된 도메인 추가 (예: `https://yourdomain.com`)
-- Google Cloud OAuth "승인된 JavaScript 원본" 및 "리디렉션 URI"에 배포된 도메인 추가
-- Netlify 환경 변수 설정:
-  - Site Settings → Environment variables
-  - `VITE_GEMINI_API_KEY` 추가
-  - `VITE_MICROSOFT_CLIENT_ID` 추가
-  - `VITE_GOOGLE_CLIENT_ID` 추가
+#### Netlify 배포
+
+##### 1️⃣ GitHub 연동 (최초 1회)
+
+1. [Netlify](https://app.netlify.com)에 로그인
+2. **Add new site** → **Import an existing project**
+3. **Deploy with GitHub** 선택
+4. 리포지토리 선택 (예: `ssakspirit/ToDo`)
+5. 빌드 설정 확인:
+   - Build command: `npm run build`
+   - Publish directory: `dist`
+6. **Deploy site** 클릭
+
+##### 2️⃣ 환경 변수 설정 (필수)
+
+GitHub 연동 후 또는 기존 사이트에서:
+
+1. Netlify 사이트 선택
+2. **Site configuration** 클릭
+3. 좌측 **Environment variables** 클릭
+4. **Add a variable** 버튼 클릭하여 다음 3개 추가:
+
+**변수 1:**
+```
+Key: VITE_GEMINI_API_KEY
+Value: (Google Gemini API 키)
+Scopes: Production
+```
+
+**변수 2:**
+```
+Key: VITE_MICROSOFT_CLIENT_ID
+Value: (Azure AD 클라이언트 ID)
+Scopes: Production
+```
+
+**변수 3:**
+```
+Key: VITE_GOOGLE_CLIENT_ID
+Value: (Google OAuth 클라이언트 ID)
+Scopes: Production
+```
+
+5. 각 변수 추가 후 **Create variable** 클릭
+6. 환경 변수 추가 시 **자동 재배포** 시작
+
+##### 3️⃣ 배포 상태 확인
+
+1. **Deploys** 탭으로 이동
+2. 배포 상태 확인:
+   - **Building** → 빌드 중
+   - **Published** → 배포 완료 ✅
+   - **Failed** → 실패 (로그 확인)
+
+##### 4️⃣ 수동 재배포 (필요시)
+
+**방법 A: Netlify 웹**
+1. **Deploys** 탭
+2. **Trigger deploy** → **Deploy site**
+
+**방법 B: Git Push**
+```bash
+# 빈 커밋으로 재배포 트리거
+git commit --allow-empty -m "chore: trigger Netlify redeploy"
+git push
+```
+
+**방법 C: Netlify CLI**
+```bash
+npm install -g netlify-cli
+netlify login
+netlify deploy --prod
+```
+
+##### 5️⃣ OAuth 리디렉션 URI 업데이트
+
+배포된 도메인 (예: `https://todo.stevecoding.kr`)을 OAuth 설정에 추가:
+
+**Microsoft Azure AD:**
+1. [Azure Portal](https://portal.azure.com) → 앱 등록
+2. **인증** → **플랫폼 구성** → **웹**
+3. 리디렉션 URI에 추가:
+   ```
+   https://your-domain.com
+   ```
+4. **저장**
+
+**Google Cloud Console:**
+1. [Google Cloud Console](https://console.cloud.google.com)
+2. **API 및 서비스** → **사용자 인증 정보**
+3. OAuth 클라이언트 ID 클릭
+4. **승인된 JavaScript 원본**에 추가:
+   ```
+   https://your-domain.com
+   ```
+5. **승인된 리디렉션 URI**에 추가:
+   ```
+   https://your-domain.com
+   ```
+6. **저장**
+
+##### 6️⃣ 배포 완료 확인
+
+1. 배포된 사이트 접속 (예: `https://todo.stevecoding.kr`)
+2. 로그인 아이콘 2개 확인 (Microsoft, Google)
+3. 각 서비스 로그인 테스트
+4. 할 일 전송 테스트 (To Do + Calendar)
 
 ## 📖 상세 사용 방법
 

@@ -1,1 +1,1 @@
-📝 README에 구글 캘린더 설정 가이드 추가
+📝 README에 Netlify 배포 상세 가이드 추가
