@@ -1,12 +1,13 @@
 # AI To-Do 생성기
 
-사진이나 텍스트를 업로드하면 AI가 자동으로 할 일(To-Do)을 추출하여 Microsoft To Do 앱에 추가해주는 웹 애플리케이션입니다.
+사진이나 텍스트를 업로드하면 AI가 자동으로 할 일(To-Do)을 추출하여 Microsoft To Do 앱과 Google Calendar에 자동으로 추가해주는 웹 애플리케이션입니다.
 
 ## 주요 기능
 
 - **AI 기반 텍스트/이미지 분석**: Google Gemini AI를 사용하여 카카오톡 캡처, 메모, 이미지에서 할 일을 자동으로 추출
 - **다중 이미지 처리**: 여러 장의 이미지를 한 번에 업로드하여 일괄 분석
-- **Microsoft To Do 연동**: 추출된 할 일을 Microsoft To Do 앱에 자동으로 추가
+- **이중 서비스 연동**: 추출된 할 일을 Microsoft To Do 앱과 Google Calendar에 동시 자동 추가
+- **Google Calendar 종일 이벤트**: 기한 날짜에 종일 이벤트로 생성, 오전 7:30 자동 알림
 - **다크 모드 지원**: 라이트/다크 테마 자동 전환
 - **반응형 디자인**: 모바일, 태블릿, 데스크톱 모든 환경 지원
 
@@ -17,6 +18,7 @@
 - Node.js 18 이상
 - Google Gemini API 키
 - Microsoft Azure AD 앱 등록 (Client ID)
+- Google Cloud OAuth 클라이언트 ID
 
 ### 1. Google Gemini API 키 발급
 
@@ -43,7 +45,40 @@
    - `Tasks.ReadWrite`
 4. "관리자 동의 허용" 클릭 (선택사항)
 
-### 3. 설치 및 실행
+### 3. Google Cloud OAuth 설정
+
+1. [Google Cloud Console](https://console.cloud.google.com)에 접속
+2. 새 프로젝트 생성 또는 기존 프로젝트 선택
+   - 프로젝트 이름: `todo-ai-app` (원하는 이름)
+3. **API 및 서비스** → **라이브러리**
+   - "Google Calendar API" 검색
+   - **사용 설정** 클릭
+4. **API 및 서비스** → **OAuth 동의 화면**
+   - 사용자 유형: **외부** 선택
+   - 앱 이름: `To-Do AI App`
+   - 사용자 지원 이메일: 본인 이메일 선택
+   - 개발자 연락처 정보: 본인 이메일 입력
+   - **저장 후 계속** 클릭
+5. **범위 추가**
+   - **범위 추가 또는 삭제** 클릭
+   - `https://www.googleapis.com/auth/calendar` 선택
+   - **업데이트** → **저장 후 계속**
+6. **테스트 사용자** (선택사항)
+   - **+ ADD USERS** 클릭하여 본인 Gmail 주소 추가
+7. **API 및 서비스** → **사용자 인증 정보**
+   - **+ 사용자 인증 정보 만들기** → **OAuth 클라이언트 ID** 선택
+   - 애플리케이션 유형: **웹 애플리케이션**
+   - 이름: `To-Do Web Client`
+   - **승인된 JavaScript 원본**:
+     - `http://localhost:5173` (개발 환경)
+     - `https://your-domain.com` (배포 도메인)
+   - **승인된 리디렉션 URI**:
+     - `http://localhost:5173`
+     - `https://your-domain.com`
+   - **만들기** 클릭
+8. **클라이언트 ID** 복사 (형식: `xxxxx.apps.googleusercontent.com`)
+
+### 4. 설치 및 실행
 
 ```bash
 # 의존성 설치
@@ -58,6 +93,7 @@ cp .env.example .env
 ```env
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
 VITE_MICROSOFT_CLIENT_ID=your_microsoft_client_id_here
+VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
 ```
 
 ```bash
@@ -67,7 +103,7 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 접속
 
-### 4. 빌드 및 배포
+### 5. 빌드 및 배포
 
 ```bash
 # 프로덕션 빌드
@@ -79,22 +115,35 @@ npm run preview
 
 **배포 시 주의사항:**
 - Azure AD 앱 등록의 "리디렉션 URI"에 배포된 도메인 추가 (예: `https://yourdomain.com`)
-- 환경 변수 설정 확인
+- Google Cloud OAuth "승인된 JavaScript 원본" 및 "리디렉션 URI"에 배포된 도메인 추가
+- Netlify 환경 변수 설정:
+  - Site Settings → Environment variables
+  - `VITE_GEMINI_API_KEY` 추가
+  - `VITE_MICROSOFT_CLIENT_ID` 추가
+  - `VITE_GOOGLE_CLIENT_ID` 추가
 
 ## 📖 상세 사용 방법
 
-### 1️⃣ Microsoft 계정 로그인
+### 1️⃣ 계정 로그인
 
-#### 첫 로그인
-1. 우측 상단의 **📥 로그인 아이콘** 클릭
+#### Microsoft 계정 로그인 (To Do 앱 연동)
+1. 우측 상단의 **파란색 로그인 아이콘** 클릭
 2. Microsoft 계정 선택 또는 로그인
 3. 권한 요청 화면에서 **"동의"** 클릭
    - User.Read: 기본 프로필 정보
    - Tasks.ReadWrite: To Do 읽기/쓰기
 
+#### Google 계정 로그인 (Calendar 연동)
+1. 우측 상단의 **빨간색 로그인 아이콘** 클릭
+2. Google 계정 선택 또는 로그인
+3. 권한 요청 화면에서 **"허용"** 클릭
+   - Google Calendar 접근: 이벤트 생성 및 관리
+
 #### 자동 로그인
-- 한 번 로그인하면 다음 방문 시 자동으로 로그인됩니다
-- 로그아웃하려면 우측 상단 **📤 아이콘** 클릭
+- 한 번 로그인하면 다음 방문 시 자동으로 로그인됩니다 (두 서비스 모두)
+- 로그아웃하려면 우측 상단 **📤 아이콘** 클릭 (두 서비스 모두 로그아웃)
+
+**참고**: 두 서비스 모두 로그인하면 할 일이 Microsoft To Do와 Google Calendar에 **동시에 자동 추가**됩니다.
 
 ---
 
@@ -189,7 +238,7 @@ npm run preview
 
 ---
 
-### 6️⃣ Microsoft To Do에 추가하기
+### 6️⃣ To Do 앱 및 Calendar에 추가하기
 
 #### 추출된 할 일 확인
 - 할 일 목록 하단에 **개수** 표시
@@ -198,15 +247,20 @@ npm run preview
   - 내용 미리보기
   - 기한 및 알림 시간
 
-#### To Do 목록 선택
+#### To Do 목록 선택 (Microsoft만 해당)
 1. 우측 **드롭다운 메뉴**에서 목록 선택
    - 기본: "작업"
    - 또는 직접 만든 목록
 
-2. **📤 전송 아이콘** 클릭
+#### 전송하기
+1. **📤 전송 아이콘** 클릭
+2. 자동으로 두 서비스에 동시 전송:
+   - **Microsoft To Do**: 선택한 목록에 작업으로 추가
+   - **Google Calendar**: 기본 캘린더에 종일 이벤트로 추가 (오전 7:30 알림)
 
 #### 전송 완료
-- ✅ 성공 시: 할 일이 사라지고 To Do 앱에 추가됨
+- ✅ 성공 시: 할 일이 사라지고 두 앱에 추가됨
+- ⚠️ 부분 성공 시: 성공/실패 개수 표시 (예: "Microsoft: 3/3, Google: 2/3 성공")
 - ❌ 실패 시: 에러 메시지 표시
 
 ---
