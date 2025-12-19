@@ -27,7 +27,11 @@ import {
   createTasksInBatch,
   TodoList,
 } from './services/todoService';
-import { createEventsInBatch } from './services/calendarService';
+import {
+  createEventsInBatch,
+  getCalendarLists,
+  CalendarList,
+} from './services/calendarService';
 import TaskCard from './components/TaskCard';
 
 interface Attachment {
@@ -57,6 +61,11 @@ const App: React.FC = () => {
   // Todo lists
   const [todoLists, setTodoLists] = useState<TodoList[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>('');
+  
+  // Calendar lists
+  const [calendarLists, setCalendarLists] = useState<CalendarList[]>([]);
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
+  
   const [isSending, setIsSending] = useState(false);
 
   // Check auth on mount and try auto-login for both services
@@ -88,6 +97,7 @@ const App: React.FC = () => {
           newAuthState.isGoogleAuthenticated = true;
           newAuthState.googleUserName = googleAccount.name;
           newAuthState.googleUserEmail = googleAccount.email;
+          loadCalendarLists();
         }
       } catch (error) {
         console.error('Google 인증 확인 실패:', error);
@@ -111,6 +121,20 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('To-Do 목록 로드 실패:', error);
+    }
+  };
+
+  const loadCalendarLists = async () => {
+    try {
+      const lists = await getCalendarLists();
+      setCalendarLists(lists);
+      if (lists.length > 0 && !selectedCalendarId) {
+        // 'primary' 캘린더를 기본으로 선택하거나 첫 번째 캘린더 선택
+        const primaryCalendar = lists.find(cal => cal.id === 'primary') || lists[0];
+        setSelectedCalendarId(primaryCalendar.id);
+      }
+    } catch (error) {
+      console.error('캘린더 목록 로드 실패:', error);
     }
   };
 
@@ -144,6 +168,7 @@ const App: React.FC = () => {
           googleUserName: account.name,
           googleUserEmail: account.email,
         }));
+        await loadCalendarLists();
       }
     } catch (error) {
       console.error('Google 로그인 실패:', error);
@@ -167,6 +192,8 @@ const App: React.FC = () => {
       });
       setTodoLists([]);
       setSelectedListId('');
+      setCalendarLists([]);
+      setSelectedCalendarId('primary');
     } catch (error) {
       console.error('로그아웃 실패:', error);
     }
@@ -304,6 +331,11 @@ const App: React.FC = () => {
       return;
     }
 
+    if (authState.isGoogleAuthenticated && !selectedCalendarId) {
+      setErrorMsg('캘린더를 선택해주세요.');
+      return;
+    }
+
     setIsSending(true);
     setErrorMsg(null);
 
@@ -324,8 +356,8 @@ const App: React.FC = () => {
         promises.push(createTasksInBatch(selectedListId, taskDetails));
       }
 
-      if (authState.isGoogleAuthenticated) {
-        promises.push(createEventsInBatch(taskDetails));
+      if (authState.isGoogleAuthenticated && selectedCalendarId) {
+        promises.push(createEventsInBatch(taskDetails, selectedCalendarId));
       }
 
       const results = await Promise.allSettled(promises);
@@ -592,6 +624,19 @@ const App: React.FC = () => {
                       {todoLists.map((list) => (
                         <option key={list.id} value={list.id}>
                           {list.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {authState.isGoogleAuthenticated && calendarLists.length > 0 && (
+                    <select
+                      value={selectedCalendarId}
+                      onChange={(e) => setSelectedCalendarId(e.target.value)}
+                      className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
+                    >
+                      {calendarLists.map((calendar) => (
+                        <option key={calendar.id} value={calendar.id}>
+                          {calendar.summary}
                         </option>
                       ))}
                     </select>

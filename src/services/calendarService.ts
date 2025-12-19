@@ -1,6 +1,13 @@
 import { getGoogleAccessToken } from './googleAuthService';
 import { TaskDetails } from '../types';
 
+export interface CalendarList {
+  id: string;
+  summary: string;
+  backgroundColor?: string;
+  foregroundColor?: string;
+}
+
 interface CalendarEvent {
   summary: string;
   description?: string;
@@ -107,16 +114,48 @@ const convertTaskToEvent = (task: TaskDetails): CalendarEvent => {
   }
 };
 
+// Get list of calendars
+export const getCalendarLists = async (): Promise<CalendarList[]> => {
+  try {
+    const accessToken = await getGoogleAccessToken();
+    const response = await fetch(
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || '캘린더 목록 가져오기 실패');
+    }
+
+    const data = await response.json();
+    return data.items.map((item: any) => ({
+      id: item.id,
+      summary: item.summary,
+      backgroundColor: item.backgroundColor,
+      foregroundColor: item.foregroundColor,
+    }));
+  } catch (error) {
+    console.error('캘린더 목록 가져오기 실패:', error);
+    throw error;
+  }
+};
+
 // Create a single calendar event
 export const createCalendarEvent = async (
-  task: TaskDetails
+  task: TaskDetails,
+  calendarId: string = 'primary'
 ): Promise<any> => {
   try {
     const accessToken = await getGoogleAccessToken();
     const event = convertTaskToEvent(task);
 
     const response = await fetch(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
       {
         method: 'POST',
         headers: {
@@ -141,12 +180,13 @@ export const createCalendarEvent = async (
 
 // Create events in batch (sequential processing, same as todoService)
 export const createEventsInBatch = async (
-  tasks: TaskDetails[]
+  tasks: TaskDetails[],
+  calendarId: string = 'primary'
 ): Promise<any[]> => {
   const results = [];
   for (const task of tasks) {
     try {
-      const result = await createCalendarEvent(task);
+      const result = await createCalendarEvent(task, calendarId);
       results.push({ success: true, data: result });
     } catch (error) {
       results.push({ success: false, error, task });
