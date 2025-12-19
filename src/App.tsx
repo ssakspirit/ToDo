@@ -314,6 +314,19 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper: Extract required tag from task title
+  const getRequiredTag = (title: string): string | null => {
+    const match = title.match(/#(일정|기한|작업)/);
+    return match ? `#${match[1]}` : null;
+  };
+
+  // Helper: Find matching calendar ID by tag
+  const findCalendarByTag = (tag: string | null): string => {
+    if (!tag) return 'primary';
+    const calendar = calendarLists.find((cal) => cal.summary === tag);
+    return calendar ? calendar.id : 'primary';
+  };
+
   const handleSendToBoth = async () => {
     // Validation
     if (!authState.isMicrosoftAuthenticated && !authState.isGoogleAuthenticated) {
@@ -328,11 +341,6 @@ const App: React.FC = () => {
 
     if (authState.isMicrosoftAuthenticated && !selectedListId) {
       setErrorMsg('To-Do 목록을 선택해주세요.');
-      return;
-    }
-
-    if (authState.isGoogleAuthenticated && !selectedCalendarId) {
-      setErrorMsg('캘린더를 선택해주세요.');
       return;
     }
 
@@ -356,8 +364,29 @@ const App: React.FC = () => {
         promises.push(createTasksInBatch(selectedListId, taskDetails));
       }
 
-      if (authState.isGoogleAuthenticated && selectedCalendarId) {
-        promises.push(createEventsInBatch(taskDetails, selectedCalendarId));
+      if (authState.isGoogleAuthenticated) {
+        // Group tasks by calendar based on their tags
+        const tasksByCalendar = new Map<string, TaskDetails[]>();
+
+        taskDetails.forEach((task) => {
+          const tag = getRequiredTag(task.title);
+          const calendarId = findCalendarByTag(tag);
+
+          if (!tasksByCalendar.has(calendarId)) {
+            tasksByCalendar.set(calendarId, []);
+          }
+          tasksByCalendar.get(calendarId)!.push(task);
+        });
+
+        // Send each group to its corresponding calendar
+        const calendarPromises = Array.from(tasksByCalendar.entries()).map(
+          ([calendarId, tasks]) => createEventsInBatch(tasks, calendarId)
+        );
+
+        // Flatten results from all calendar batches
+        promises.push(
+          Promise.all(calendarPromises).then((results) => results.flat())
+        );
       }
 
       const results = await Promise.allSettled(promises);
