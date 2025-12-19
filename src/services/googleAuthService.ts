@@ -19,7 +19,11 @@ interface StoredTokenInfo {
 
 const GOOGLE_AUTH_KEY = 'google_auth_token';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+];
 
 // Google OAuth 2.0 popup login
 export const loginGoogle = (): Promise<GoogleAccountInfo | null> => {
@@ -169,20 +173,27 @@ export const getGoogleAccessToken = async (): Promise<string> => {
 
 // Helper: Get user info from Google API
 const getUserInfo = async (accessToken: string): Promise<GoogleAccountInfo> => {
-  const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error('사용자 정보를 가져올 수 없습니다.');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Google 사용자 정보 API 오류:', response.status, errorText);
+      throw new Error(`사용자 정보를 가져올 수 없습니다. (${response.status})`);
+    }
+
+    const data = await response.json();
+    return {
+      name: data.name,
+      email: data.email,
+      picture: data.picture,
+    };
+  } catch (error) {
+    console.error('getUserInfo 오류:', error);
+    throw error;
   }
-
-  const data = await response.json();
-  return {
-    name: data.name,
-    email: data.email,
-    picture: data.picture,
-  };
 };
