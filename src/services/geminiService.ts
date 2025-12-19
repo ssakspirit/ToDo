@@ -168,15 +168,21 @@ ${text}`;
      parts.push({ text: promptText });
   }
 
-  // 재시도 로직 (최대 3회, exponential backoff + API 키 전환)
-  const maxRetries = 3;
+  // 재시도 로직 (모든 API 키를 시도 + exponential backoff)
+  // 429 오류의 경우 모든 키를 시도하고, 다른 오류는 최대 3회 재시도
+  const maxRetries = Math.max(apiKeys.length, 3); // 키 개수와 3 중 큰 값
   let lastError: any = null;
   let currentAttemptKeyIndex = currentKeyIndex;
+  let triedKeys = new Set<number>(); // 시도한 키 추적
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // 현재 시도에 사용할 API 키 선택
       const attemptApiKey = apiKeys[currentAttemptKeyIndex];
+      triedKeys.add(currentAttemptKeyIndex);
+      
+      console.log(`API 키 시도 (${currentAttemptKeyIndex + 1}/${apiKeys.length}): ${attemptApiKey.substring(0, 20)}...`);
+      
       const aiInstance = createAIInstance(attemptApiKey);
       
       const response = await aiInstance.models.generateContent({
@@ -218,20 +224,32 @@ ${text}`;
 
       if (isQuotaExceeded) {
         // 다른 API 키가 있으면 전환 시도
-        if (apiKeys.length > 1 && attempt < maxRetries - 1) {
-          currentAttemptKeyIndex = (currentAttemptKeyIndex + 1) % apiKeys.length;
-          console.log(`할당량 초과로 API 키 전환 (키 ${currentAttemptKeyIndex + 1}/${apiKeys.length})`);
-          // 짧은 대기 후 재시도
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
+        if (apiKeys.length > 1) {
+          // 아직 시도하지 않은 키 찾기
+          let nextKeyIndex = -1;
+          for (let i = 0; i < apiKeys.length; i++) {
+            const checkIndex = (currentAttemptKeyIndex + i + 1) % apiKeys.length;
+            if (!triedKeys.has(checkIndex)) {
+              nextKeyIndex = checkIndex;
+              break;
+            }
+          }
+          
+          if (nextKeyIndex !== -1) {
+            currentAttemptKeyIndex = nextKeyIndex;
+            console.log(`할당량 초과로 API 키 전환 (키 ${currentAttemptKeyIndex + 1}/${apiKeys.length})`);
+            // 짧은 대기 후 재시도
+            await new Promise(resolve => setTimeout(resolve, 500));
+            continue;
+          }
         }
         
-        // 다른 키가 없거나 모든 키를 시도한 경우
+        // 모든 키를 시도했거나 다른 키가 없는 경우
         const retryDelayMatch = error?.message?.match(/Please retry in ([\d.]+)s/i);
         const retryDelaySeconds = retryDelayMatch ? parseFloat(retryDelayMatch[1]) : 30;
         const delayMs = Math.ceil(retryDelaySeconds * 1000);
         
-        const quotaError = new Error(`일일 요청 한도를 초과했습니다. ${Math.ceil(retryDelaySeconds)}초 후 다시 시도해주세요.`);
+        const quotaError = new Error(`모든 API 키의 일일 요청 한도를 초과했습니다. ${Math.ceil(retryDelaySeconds)}초 후 다시 시도해주세요.`);
         (quotaError as any).status = 429;
         (quotaError as any).retryAfter = delayMs;
         throw quotaError;
