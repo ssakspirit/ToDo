@@ -5,11 +5,13 @@ interface CalendarEvent {
   summary: string;
   description?: string;
   start: {
-    date: string;
+    date?: string;
+    dateTime?: string;
     timeZone: string;
   };
   end: {
-    date: string;
+    date?: string;
+    dateTime?: string;
     timeZone: string;
   };
   reminders: {
@@ -21,48 +23,88 @@ interface CalendarEvent {
   };
 }
 
-// Convert TaskDetails to Google Calendar Event (all-day event)
+// Convert TaskDetails to Google Calendar Event
 const convertTaskToEvent = (task: TaskDetails): CalendarEvent => {
-  // Extract date from dueDateTime (ISO 8601 format)
   const dueDateTime = task.dueDateTime || new Date().toISOString();
   const dueDate = new Date(dueDateTime);
-  const dateString = dueDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  const reminderDateTime = task.reminderDateTime 
+    ? new Date(task.reminderDateTime) 
+    : null;
 
-  // Calculate reminder minutes
-  // Goal: Reminder at 7:30 AM on due date
-  // All-day events start at 00:00
-  // Google wants "minutes before event start"
-  // But our due time is 23:59, so we need reminder at 7:30 AM of the same day
-  // From 00:00 to 7:30 = 7.5 hours = 450 minutes AFTER start
-  // However, for all-day events, reminders are relative to the day start (00:00)
-  // So 7:30 AM = 450 minutes after midnight
-  // Google API expects positive values for "minutes before"
-  // For all-day events starting at midnight, 7:30 AM reminder = (24*60 - 450) minutes before end of day
-  // But actually, we want 7:30 AM on the day of the event
-  // The simplest approach: Set reminder for 450 minutes (7.5 hours)
-  const reminderMinutes = 450; // 7:30 AM = 7.5 hours = 450 minutes from start of day
+  // dueDateTime에 시간 정보가 있는지 확인 (23:59:00이 아닌 경우)
+  const hasSpecificTime = dueDate.getHours() !== 23 || dueDate.getMinutes() !== 59;
+  
+  // 시간이 있는 이벤트인지 종일 이벤트인지 결정
+  // dueDateTime이 23:59:00이면 종일 이벤트로 처리
+  const isAllDay = !hasSpecificTime;
 
-  return {
-    summary: task.title,
-    description: task.body,
-    start: {
-      date: dateString,
-      timeZone: 'Asia/Seoul',
-    },
-    end: {
-      date: dateString,
-      timeZone: 'Asia/Seoul',
-    },
-    reminders: {
-      useDefault: false,
-      overrides: [
-        {
-          method: 'popup',
-          minutes: reminderMinutes,
-        },
-      ],
-    },
-  };
+  if (isAllDay) {
+    // 종일 이벤트 (기한만 있고 구체적 시간이 없는 경우)
+    const dateString = dueDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // 알림 시간 계산 (기한 날짜 오전 7:30)
+    const reminderMinutes = 450; // 7:30 AM = 7.5 hours = 450 minutes from start of day
+
+    return {
+      summary: task.title,
+      description: task.body,
+      start: {
+        date: dateString,
+        timeZone: 'Asia/Seoul',
+      },
+      end: {
+        date: dateString,
+        timeZone: 'Asia/Seoul',
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          {
+            method: 'popup',
+            minutes: reminderMinutes,
+          },
+        ],
+      },
+    };
+  } else {
+    // 시간이 있는 이벤트 (구체적인 시간이 명시된 경우)
+    // 시작 시간: dueDateTime의 시간 사용
+    const startDateTime = new Date(dueDate);
+    
+    // 종료 시간: 시작 시간 + 1시간 (또는 reminderDateTime이 있으면 그 시간 사용)
+    const endDateTime = reminderDateTime && reminderDateTime > startDateTime
+      ? new Date(reminderDateTime)
+      : new Date(startDateTime.getTime() + 60 * 60 * 1000); // 기본 1시간 후
+
+    // 알림 시간 계산 (reminderDateTime이 있으면 사용, 없으면 시작 30분 전)
+    let reminderMinutes = 30; // 기본 30분 전
+    if (reminderDateTime && reminderDateTime <= startDateTime) {
+      const diffMs = startDateTime.getTime() - reminderDateTime.getTime();
+      reminderMinutes = Math.max(0, Math.floor(diffMs / (60 * 1000)));
+    }
+
+    return {
+      summary: task.title,
+      description: task.body,
+      start: {
+        dateTime: startDateTime.toISOString(),
+        timeZone: 'Asia/Seoul',
+      },
+      end: {
+        dateTime: endDateTime.toISOString(),
+        timeZone: 'Asia/Seoul',
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          {
+            method: 'popup',
+            minutes: reminderMinutes,
+          },
+        ],
+      },
+    };
+  }
 };
 
 // Create a single calendar event
