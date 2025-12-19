@@ -264,6 +264,65 @@ const App: React.FC = () => {
     setTasks((prev) => prev.filter((task) => task.id !== id));
   };
 
+  // 태그에 따라 캘린더 자동 선택
+  const selectCalendarByTag = (firstTag: string) => {
+    if (!authState.isGoogleAuthenticated || calendarLists.length === 0) {
+      return;
+    }
+
+    // 태그를 소문자로 변환하여 매칭
+    const tagLower = firstTag.toLowerCase();
+    
+    // 태그에 따른 캘린더 매핑 (캘린더 이름에 따라 자동 매칭)
+    let targetCalendarId: string | null = null;
+
+    // #일정 태그인 경우
+    if (tagLower === '#일정' || tagLower === '일정') {
+      // "Ssak" 또는 "Tasks" 캘린더 찾기
+      const ssakCalendar = calendarLists.find(cal => 
+        cal.summary.toLowerCase().includes('ssak') || 
+        cal.summary.toLowerCase().includes('일정')
+      );
+      if (ssakCalendar) {
+        targetCalendarId = ssakCalendar.id;
+      }
+    }
+    // #기한 태그인 경우
+    else if (tagLower === '#기한' || tagLower === '기한') {
+      // "Tasks" 캘린더 찾기
+      const tasksCalendar = calendarLists.find(cal => 
+        cal.summary.toLowerCase().includes('tasks') || 
+        cal.summary.toLowerCase().includes('작업')
+      );
+      if (tasksCalendar) {
+        targetCalendarId = tasksCalendar.id;
+      }
+    }
+    // #작업 태그인 경우
+    else if (tagLower === '#작업' || tagLower === '작업') {
+      // "Tasks" 캘린더 찾기
+      const tasksCalendar = calendarLists.find(cal => 
+        cal.summary.toLowerCase().includes('tasks') || 
+        cal.summary.toLowerCase().includes('작업')
+      );
+      if (tasksCalendar) {
+        targetCalendarId = tasksCalendar.id;
+      }
+    }
+
+    // 매칭된 캘린더가 있으면 선택
+    if (targetCalendarId) {
+      setSelectedCalendarId(targetCalendarId);
+    }
+  };
+
+  // 제목에서 첫 번째 태그 추출
+  const extractFirstTag = (title: string): string | null => {
+    // #으로 시작하는 첫 번째 태그 찾기
+    const tagMatch = title.match(/#[^\s#]+/);
+    return tagMatch ? tagMatch[0] : null;
+  };
+
   const handleAnalyze = async () => {
     if (!inputText && attachments.length === 0) {
       setErrorMsg('분석할 텍스트를 입력하거나 파일을 업로드해주세요.');
@@ -292,6 +351,14 @@ const App: React.FC = () => {
 
       setTasks((prev) => [...newTasks, ...prev]);
       setStatus(AnalysisStatus.SUCCESS);
+
+      // 첫 번째 태그에 따라 캘린더 자동 선택
+      if (newTasks.length > 0 && authState.isGoogleAuthenticated) {
+        const firstTag = extractFirstTag(newTasks[0].title);
+        if (firstTag) {
+          selectCalendarByTag(firstTag);
+        }
+      }
 
       setInputText('');
       setAttachments([]);
