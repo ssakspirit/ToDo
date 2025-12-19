@@ -28,6 +28,10 @@ export enum AnalysisStatus {
 
 export interface AuthState {
   isAuthenticated: boolean;
+  isMicrosoftAuthenticated: boolean;
+  isGoogleAuthenticated: boolean;
   userName?: string;
   userEmail?: string;
+  googleUserName?: string;
+  googleUserEmail?: string;
 }

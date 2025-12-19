@@ -18,10 +18,16 @@ import { AnalysisStatus, AnalyzedTask, AuthState, TaskDetails } from './types';
 import { analyzeContent } from './services/geminiService';
 import { login, logout, getAccount, loginSilently } from './services/authService';
 import {
+  loginGoogle,
+  loginGoogleSilently,
+  logoutGoogle,
+} from './services/googleAuthService';
+import {
   getTodoLists,
   createTasksInBatch,
   TodoList,
 } from './services/todoService';
+import { createEventsInBatch } from './services/calendarService';
 import TaskCard from './components/TaskCard';
 
 interface Attachment {
@@ -44,6 +50,8 @@ const App: React.FC = () => {
   // Auth state
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
+    isMicrosoftAuthenticated: false,
+    isGoogleAuthenticated: false,
   });
 
   // Todo lists
@@ -51,23 +59,45 @@ const App: React.FC = () => {
   const [selectedListId, setSelectedListId] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
 
-  // Check auth on mount and try auto-login
+  // Check auth on mount and try auto-login for both services
   useEffect(() => {
     const checkAuth = async () => {
+      const newAuthState: AuthState = {
+        isAuthenticated: false,
+        isMicrosoftAuthenticated: false,
+        isGoogleAuthenticated: false,
+      };
+
       try {
-        // Try silent login (auto-login if previously logged in)
-        const account = await loginSilently();
-        if (account) {
-          setAuthState({
-            isAuthenticated: true,
-            userName: account.name || undefined,
-            userEmail: account.username || undefined,
-          });
+        // Try Microsoft silent login
+        const msAccount = await loginSilently();
+        if (msAccount) {
+          newAuthState.isMicrosoftAuthenticated = true;
+          newAuthState.userName = msAccount.name || undefined;
+          newAuthState.userEmail = msAccount.username || undefined;
           loadTodoLists();
         }
       } catch (error) {
-        console.error('인증 확인 실패:', error);
+        console.error('Microsoft 인증 확인 실패:', error);
       }
+
+      try {
+        // Try Google silent login
+        const googleAccount = await loginGoogleSilently();
+        if (googleAccount) {
+          newAuthState.isGoogleAuthenticated = true;
+          newAuthState.googleUserName = googleAccount.name;
+          newAuthState.googleUserEmail = googleAccount.email;
+        }
+      } catch (error) {
+        console.error('Google 인증 확인 실패:', error);
+      }
+
+      // Update isAuthenticated if either service is authenticated
+      newAuthState.isAuthenticated =
+        newAuthState.isMicrosoftAuthenticated || newAuthState.isGoogleAuthenticated;
+
+      setAuthState(newAuthState);
     };
     checkAuth();
   }, []);
@@ -88,23 +118,53 @@ const App: React.FC = () => {
     try {
       const account = await login();
       if (account) {
-        setAuthState({
+        setAuthState((prev) => ({
+          ...prev,
           isAuthenticated: true,
+          isMicrosoftAuthenticated: true,
           userName: account.name || undefined,
           userEmail: account.username || undefined,
-        });
+        }));
         await loadTodoLists();
       }
     } catch (error) {
-      console.error('로그인 실패:', error);
-      setErrorMsg('로그인에 실패했습니다. 다시 시도해주세요.');
+      console.error('Microsoft 로그인 실패:', error);
+      setErrorMsg('Microsoft 로그인에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const account = await loginGoogle();
+      if (account) {
+        setAuthState((prev) => ({
+          ...prev,
+          isAuthenticated: true,
+          isGoogleAuthenticated: true,
+          googleUserName: account.name,
+          googleUserEmail: account.email,
+        }));
+      }
+    } catch (error) {
+      console.error('Google 로그인 실패:', error);
+      setErrorMsg('Google 로그인에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
   const handleLogout = async () => {
     try {
-      await logout();
-      setAuthState({ isAuthenticated: false });
+      // Logout from both services
+      if (authState.isMicrosoftAuthenticated) {
+        await logout();
+      }
+      if (authState.isGoogleAuthenticated) {
+        await logoutGoogle();
+      }
+      setAuthState({
+        isAuthenticated: false,
+        isMicrosoftAuthenticated: false,
+        isGoogleAuthenticated: false,
+      });
       setTodoLists([]);
       setSelectedListId('');
     } catch (error) {
@@ -215,9 +275,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSendToTodo = async () => {
-    if (!authState.isAuthenticated) {
-      setErrorMsg('먼저 Microsoft 계정으로 로그인해주세요.');
+  const handleSendToBoth = async () => {
+    // Validation
+    if (!authState.isMicrosoftAuthenticated && !authState.isGoogleAuthenticated) {
+      setErrorMsg('먼저 Microsoft 또는 Google 계정으로 로그인해주세요.');
       return;
     }
 
@@ -226,7 +287,7 @@ const App: React.FC = () => {
       return;
     }
 
-    if (!selectedListId) {
+    if (authState.isMicrosoftAuthenticated && !selectedListId) {
       setErrorMsg('To-Do 목록을 선택해주세요.');
       return;
     }
@@ -244,16 +305,60 @@ const App: React.FC = () => {
         categories: task.categories,
       }));
 
-      const results = await createTasksInBatch(selectedListId, taskDetails);
+      // Send to both services in parallel
+      const promises: Promise<any[]>[] = [];
 
-      const successCount = results.filter((r) => r.success).length;
-      const failCount = results.filter((r) => !r.success).length;
+      if (authState.isMicrosoftAuthenticated && selectedListId) {
+        promises.push(createTasksInBatch(selectedListId, taskDetails));
+      }
 
-      if (failCount === 0) {
+      if (authState.isGoogleAuthenticated) {
+        promises.push(createEventsInBatch(taskDetails));
+      }
+
+      const results = await Promise.allSettled(promises);
+
+      // Analyze results
+      let msSuccess = 0;
+      let msTotal = 0;
+      let googleSuccess = 0;
+      let googleTotal = 0;
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const successCount = result.value.filter((r: any) => r.success).length;
+          const totalCount = result.value.length;
+
+          if (index === 0 && authState.isMicrosoftAuthenticated) {
+            msSuccess = successCount;
+            msTotal = totalCount;
+          } else if (
+            (index === 0 && !authState.isMicrosoftAuthenticated) ||
+            (index === 1 && authState.isMicrosoftAuthenticated)
+          ) {
+            googleSuccess = successCount;
+            googleTotal = totalCount;
+          }
+        }
+      });
+
+      // User feedback
+      const messages: string[] = [];
+      if (authState.isMicrosoftAuthenticated) {
+        messages.push(`Microsoft: ${msSuccess}/${msTotal}`);
+      }
+      if (authState.isGoogleAuthenticated) {
+        messages.push(`Google: ${googleSuccess}/${googleTotal}`);
+      }
+
+      const allSuccess =
+        (authState.isMicrosoftAuthenticated ? msSuccess === msTotal : true) &&
+        (authState.isGoogleAuthenticated ? googleSuccess === googleTotal : true);
+
+      if (allSuccess) {
         setTasks([]);
       } else {
-        console.error('실패한 작업:', results.filter((r) => !r.success));
-        setErrorMsg(`${successCount}개 성공, ${failCount}개 실패했습니다.`);
+        setErrorMsg(`${messages.join(', ')} 성공`);
       }
     } catch (error) {
       console.error('작업 전송 실패:', error);
@@ -281,21 +386,31 @@ const App: React.FC = () => {
               </h1>
             </div>
             <div className="flex items-center gap-1">
-              {authState.isAuthenticated ? (
+              {!authState.isMicrosoftAuthenticated && (
+                <button
+                  onClick={handleLogin}
+                  className="p-2 text-slate-400 dark:text-slate-600 hover:text-blue-500 transition-colors"
+                  title="Microsoft 로그인"
+                >
+                  <LogIn className="w-4 h-4" />
+                </button>
+              )}
+              {!authState.isGoogleAuthenticated && (
+                <button
+                  onClick={handleGoogleLogin}
+                  className="p-2 text-slate-400 dark:text-slate-600 hover:text-red-500 transition-colors"
+                  title="Google 로그인"
+                >
+                  <LogIn className="w-4 h-4" />
+                </button>
+              )}
+              {authState.isAuthenticated && (
                 <button
                   onClick={handleLogout}
                   className="p-2 text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors"
                   title="로그아웃"
                 >
                   <LogOut className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleLogin}
-                  className="p-2 text-slate-400 dark:text-slate-600 hover:text-indigo-500 transition-colors"
-                  title="Microsoft 로그인"
-                >
-                  <LogIn className="w-4 h-4" />
                 </button>
               )}
               <button
@@ -456,40 +571,53 @@ const App: React.FC = () => {
                   {tasks.length}개
                 </span>
                 <div className="flex items-center gap-2">
-                  {authState.isAuthenticated && todoLists.length > 0 ? (
-                    <>
-                      <select
-                        value={selectedListId}
-                        onChange={(e) => setSelectedListId(e.target.value)}
-                        className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
-                      >
-                        {todoLists.map((list) => (
-                          <option key={list.id} value={list.id}>
-                            {list.displayName}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={handleSendToTodo}
-                        disabled={isSending}
-                        className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 disabled:bg-slate-400 text-white dark:text-slate-900 rounded-lg transition-colors"
-                        title={isSending ? "전송 중..." : "To Do에 추가"}
-                      >
-                        {isSending ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleLogin}
-                      className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg transition-colors flex items-center gap-1"
-                      title="Microsoft 로그인"
+                  {authState.isMicrosoftAuthenticated && todoLists.length > 0 && (
+                    <select
+                      value={selectedListId}
+                      onChange={(e) => setSelectedListId(e.target.value)}
+                      className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
                     >
-                      <LogIn className="w-4 h-4" />
+                      {todoLists.map((list) => (
+                        <option key={list.id} value={list.id}>
+                          {list.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {authState.isAuthenticated ? (
+                    <button
+                      onClick={handleSendToBoth}
+                      disabled={isSending}
+                      className="p-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 disabled:bg-slate-400 text-white dark:text-slate-900 rounded-lg transition-colors"
+                      title={isSending ? "전송 중..." : "전송"}
+                    >
+                      {isSending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
                     </button>
+                  ) : (
+                    <>
+                      {!authState.isMicrosoftAuthenticated && (
+                        <button
+                          onClick={handleLogin}
+                          className="p-2 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg transition-colors"
+                          title="Microsoft 로그인"
+                        >
+                          <LogIn className="w-4 h-4" />
+                        </button>
+                      )}
+                      {!authState.isGoogleAuthenticated && (
+                        <button
+                          onClick={handleGoogleLogin}
+                          className="p-2 bg-red-600 dark:bg-red-500 hover:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg transition-colors"
+                          title="Google 로그인"
+                        >
+                          <LogIn className="w-4 h-4" />
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
