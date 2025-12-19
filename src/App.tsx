@@ -265,7 +265,7 @@ const App: React.FC = () => {
   };
 
   // 태그에 따라 캘린더 자동 선택
-  const selectCalendarByTag = (firstTag: string) => {
+  const selectCalendarByTag = (firstTag: string, title: string) => {
     if (!authState.isGoogleAuthenticated || calendarLists.length === 0) {
       return;
     }
@@ -276,8 +276,18 @@ const App: React.FC = () => {
     // 태그에 따른 캘린더 매핑 (캘린더 이름에 따라 자동 매칭)
     let targetCalendarId: string | null = null;
 
+    // #기프티콘 태그가 있는 경우 (우선순위 높음)
+    if (hasTag(title, '#기프티콘') || hasTag(title, '기프티콘')) {
+      const giftCalendar = calendarLists.find(cal => 
+        cal.summary.toLowerCase().includes('기프티콘') || 
+        cal.summary.toLowerCase().includes('gift')
+      );
+      if (giftCalendar) {
+        targetCalendarId = giftCalendar.id;
+      }
+    }
     // #일정 태그인 경우
-    if (tagLower === '#일정' || tagLower === '일정') {
+    else if (tagLower === '#일정' || tagLower === '일정') {
       // "Ssak" 또는 "Tasks" 캘린더 찾기
       const ssakCalendar = calendarLists.find(cal => 
         cal.summary.toLowerCase().includes('ssak') || 
@@ -323,6 +333,13 @@ const App: React.FC = () => {
     return tagMatch ? tagMatch[0] : null;
   };
 
+  // 제목에서 특정 태그 찾기 (모든 태그 검색)
+  const hasTag = (title: string, tag: string): boolean => {
+    const tagLower = tag.toLowerCase();
+    const titleLower = title.toLowerCase();
+    return titleLower.includes(tagLower);
+  };
+
   const handleAnalyze = async () => {
     if (!inputText && attachments.length === 0) {
       setErrorMsg('분석할 텍스트를 입력하거나 파일을 업로드해주세요.');
@@ -356,7 +373,7 @@ const App: React.FC = () => {
       if (newTasks.length > 0 && authState.isGoogleAuthenticated) {
         const firstTag = extractFirstTag(newTasks[0].title);
         if (firstTag) {
-          selectCalendarByTag(firstTag);
+          selectCalendarByTag(firstTag, newTasks[0].title);
         }
       }
 
@@ -365,13 +382,28 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       
+      // 429 오류 (할당량 초과)에 대한 특별한 메시지
+      const isQuotaExceeded = err?.status === 429 || 
+                             err?.code === 429 ||
+                             err?.message?.includes('quota') ||
+                             err?.message?.includes('RESOURCE_EXHAUSTED');
+      
       // 503 오류 (서비스 과부하)에 대한 특별한 메시지
       const isOverloaded = err?.status === 503 || 
                           err?.code === 503 ||
                           err?.message?.includes('overloaded') ||
                           err?.message?.includes('UNAVAILABLE');
       
-      if (isOverloaded) {
+      if (isQuotaExceeded) {
+        // retryAfter 정보가 있으면 표시
+        const retryAfter = err?.retryAfter;
+        if (retryAfter) {
+          const retrySeconds = Math.ceil(retryAfter / 1000);
+          setErrorMsg(`일일 요청 한도를 초과했습니다. ${retrySeconds}초 후 다시 시도해주세요.`);
+        } else {
+          setErrorMsg('일일 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+        }
+      } else if (isOverloaded) {
         setErrorMsg('AI 서비스가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.');
       } else {
         setErrorMsg('내용을 분석하는 중 오류가 발생했습니다. 다시 시도해주세요.');

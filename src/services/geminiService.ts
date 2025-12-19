@@ -1,7 +1,39 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { TaskDetails } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// 여러 API 키 지원 (쉼표로 구분)
+const getApiKeys = (): string[] => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  // 쉼표로 구분된 여러 키 지원
+  const keys = apiKey.split(',').map(key => key.trim()).filter(key => key.length > 0);
+  return keys.length > 0 ? keys : [];
+};
+
+// API 키 배열
+const apiKeys = getApiKeys();
+let currentKeyIndex = 0;
+
+// 현재 API 키 가져오기
+const getCurrentApiKey = (): string => {
+  if (apiKeys.length === 0) {
+    throw new Error('Gemini API 키가 설정되지 않았습니다.');
+  }
+  return apiKeys[currentKeyIndex];
+};
+
+// 다음 API 키로 전환
+const switchToNextApiKey = (): boolean => {
+  if (apiKeys.length <= 1) {
+    return false; // 키가 하나뿐이면 전환 불가
+  }
+  currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
+  return true;
+};
+
+// GoogleGenAI 인스턴스 생성 함수
+const createAIInstance = (apiKey: string) => {
+  return new GoogleGenAI({ apiKey });
+};
 
 // Define the schema for a single task item
 const taskItemSchema: Schema = {
@@ -82,9 +114,9 @@ export const analyzeContent = async (
 [중요 규칙]
 1. **제목 태그 필수**: 모든 할 일 제목은 "#필수태그 #추가태그 내용" 형식
    - 필수태그: #일정 (그때 꼭 해야 하는 약속/이벤트) / #기한 (그때까지만 하면 되는 것) / #작업 (언제든 가능)
-   - 추가태그: 내용에 맞는 태그 1개 (예: #회의, #보고서, #쇼핑, #청소 등)
+   - 추가태그: 내용에 맞는 태그 1개 (예: #회의, #보고서, #쇼핑, #청소, #기프티콘 등)
    - 예시: "#일정 #회의 오후 3시 팀 미팅", "#기한 #과제 영어 숙제 제출", "#작업 #청소 방 정리하기"
-   - **기프티콘 특별 규칙**: 기프티콘/쿠폰 이미지인 경우 → "#기한 #기프티콘 [상품명]" 형식, 유효기간을 기한으로 설정
+   - **기프티콘 특별 규칙**: 기프티콘/쿠폰 이미지인 경우 → 반드시 "#기한 #기프티콘 [상품명]" 형식으로 작성. #기프티콘 태그를 추가태그로 포함해야 함. 유효기간을 기한으로 설정
 
 2. **기한(dueDateTime)**:
    - **#일정 태그 + 시간 명시된 경우**: 시작 시간을 dueDateTime에 설정
@@ -136,13 +168,18 @@ ${text}`;
      parts.push({ text: promptText });
   }
 
-  // 재시도 로직 (최대 3회, exponential backoff)
+  // 재시도 로직 (최대 3회, exponential backoff + API 키 전환)
   const maxRetries = 3;
   let lastError: any = null;
+  let currentAttemptKeyIndex = currentKeyIndex;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const response = await ai.models.generateContent({
+      // 현재 시도에 사용할 API 키 선택
+      const attemptApiKey = apiKeys[currentAttemptKeyIndex];
+      const aiInstance = createAIInstance(attemptApiKey);
+      
+      const response = await aiInstance.models.generateContent({
         model: "gemini-2.5-flash",
         contents: { parts },
         config: {
@@ -172,6 +209,33 @@ ${text}`;
     } catch (error: any) {
       lastError = error;
       console.error(`Gemini 분석 오류 (시도 ${attempt + 1}/${maxRetries}):`, error);
+
+      // 429 오류 (할당량 초과)인 경우
+      const isQuotaExceeded = error?.status === 429 || 
+                              error?.code === 429 ||
+                              error?.message?.includes('quota') ||
+                              error?.message?.includes('RESOURCE_EXHAUSTED');
+
+      if (isQuotaExceeded) {
+        // 다른 API 키가 있으면 전환 시도
+        if (apiKeys.length > 1 && attempt < maxRetries - 1) {
+          currentAttemptKeyIndex = (currentAttemptKeyIndex + 1) % apiKeys.length;
+          console.log(`할당량 초과로 API 키 전환 (키 ${currentAttemptKeyIndex + 1}/${apiKeys.length})`);
+          // 짧은 대기 후 재시도
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        
+        // 다른 키가 없거나 모든 키를 시도한 경우
+        const retryDelayMatch = error?.message?.match(/Please retry in ([\d.]+)s/i);
+        const retryDelaySeconds = retryDelayMatch ? parseFloat(retryDelayMatch[1]) : 30;
+        const delayMs = Math.ceil(retryDelaySeconds * 1000);
+        
+        const quotaError = new Error(`일일 요청 한도를 초과했습니다. ${Math.ceil(retryDelaySeconds)}초 후 다시 시도해주세요.`);
+        (quotaError as any).status = 429;
+        (quotaError as any).retryAfter = delayMs;
+        throw quotaError;
+      }
 
       // 503 오류 (서비스 과부하)인 경우 재시도
       const isOverloaded = error?.status === 503 || 

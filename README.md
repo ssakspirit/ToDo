@@ -22,9 +22,42 @@
 
 ### 1. Google Gemini API 키 발급
 
-1. [Google AI Studio](https://makersuite.google.com/app/apikey)에 접속
-2. "Create API Key" 클릭하여 API 키 발급
-3. 발급받은 API 키를 메모
+#### 방법 1: Google AI Studio (추천)
+
+1. [Google AI Studio](https://aistudio.google.com)에 접속
+2. Google 계정으로 로그인
+3. 좌측 메뉴에서 **"Get API key"** 또는 **"API 키 받기"** 클릭
+4. **"Create API key"** 클릭
+5. 새 프로젝트 생성 또는 기존 프로젝트 선택
+6. 생성된 API 키가 표시되면 **복사**하여 안전한 곳에 저장
+
+#### 방법 2: Google Cloud Console
+
+1. [Google Cloud Console](https://console.cloud.google.com)에 접속
+2. 프로젝트 선택 또는 새 프로젝트 생성
+3. **API 및 서비스** → **라이브러리**
+4. "Generative Language API" 또는 "Gemini API" 검색
+5. **사용 설정** 클릭
+6. **API 및 서비스** → **사용자 인증 정보**
+7. **+ 사용자 인증 정보 만들기** → **API 키**
+8. 생성된 API 키 복사
+
+#### 여러 계정에서 API 키 발급하기
+
+할당량 문제를 해결하기 위해 여러 Google 계정에서 API 키를 발급받을 수 있습니다:
+
+1. **첫 번째 계정**에서 위 방법으로 API 키 발급
+2. **두 번째 계정**으로 로그아웃 후 다시 로그인
+3. 두 번째 계정에서도 동일한 방법으로 API 키 발급
+4. 환경 변수에 쉼표로 구분하여 입력:
+   ```env
+   VITE_GEMINI_API_KEY=첫번째_키,두번째_키
+   ```
+
+**참고:**
+- 무료 티어는 일일 20회 요청 제한이 있습니다
+- 여러 키를 사용하면 할당량을 분산할 수 있습니다
+- API 키는 외부에 노출되지 않도록 주의하세요
 
 ### 2. Microsoft Azure AD 앱 등록
 
@@ -96,6 +129,15 @@ VITE_MICROSOFT_CLIENT_ID=your_microsoft_client_id_here
 VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
 ```
 
+**여러 Gemini API 키 사용 (선택사항)**:
+할당량 문제를 해결하기 위해 여러 API 키를 사용할 수 있습니다. 쉼표로 구분하여 입력하세요:
+
+```env
+VITE_GEMINI_API_KEY=api_key_1,api_key_2,api_key_3
+```
+
+첫 번째 키의 할당량이 초과되면 자동으로 다음 키로 전환됩니다.
+
 ```bash
 # 개발 서버 실행
 npm run dev
@@ -140,9 +182,10 @@ GitHub 연동 후 또는 기존 사이트에서:
 **변수 1:**
 ```
 Key: VITE_GEMINI_API_KEY
-Value: (Google Gemini API 키)
+Value: (Google Gemini API 키 또는 쉼표로 구분된 여러 키)
 Scopes: Production
 ```
+예: `api_key_1,api_key_2` (여러 키 사용 시)
 
 **변수 2:**
 ```
