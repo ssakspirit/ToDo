@@ -130,13 +130,15 @@ VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
 ```
 
 **여러 Gemini API 키 사용 (선택사항)**:
-할당량 문제를 해결하기 위해 여러 API 키를 사용할 수 있습니다. 쉼표로 구분하여 입력하세요:
+할당량 문제를 해결하기 위해 여러 API 키를 사용할 수 있습니다. **쉼표로 구분하고 따옴표로 감싸서** 입력하세요:
 
 ```env
-VITE_GEMINI_API_KEY=api_key_1,api_key_2,api_key_3
+VITE_GEMINI_API_KEY="api_key_1,api_key_2,api_key_3"
 ```
 
 첫 번째 키의 할당량이 초과되면 자동으로 다음 키로 전환됩니다.
+
+**중요**: 여러 키를 사용할 때는 반드시 전체를 따옴표(`"`)로 감싸야 합니다.
 
 ```bash
 # 개발 서버 실행
@@ -182,10 +184,12 @@ GitHub 연동 후 또는 기존 사이트에서:
 **변수 1:**
 ```
 Key: VITE_GEMINI_API_KEY
-Value: (Google Gemini API 키 또는 쉼표로 구분된 여러 키)
-Scopes: Production
+Value: "api_key_1,api_key_2,api_key_3"
+Scopes: Production, Deploy Previews, Branch deploys
 ```
-예: `api_key_1,api_key_2` (여러 키 사용 시)
+**중요**:
+- 여러 키를 사용할 때는 쉼표로 구분하고 **따옴표로 전체를 감싸야** 합니다
+- 모든 Scopes를 선택하세요 (Production, Deploy Previews, Branch deploys)
 
 **변수 2:**
 ```
