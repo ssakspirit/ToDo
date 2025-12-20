@@ -14,7 +14,8 @@
       "Bash(npm install:*)",
       "WebSearch",
       "Bash(cat:*)",
-      "Bash(dir /b /s package.json)"
+      "Bash(dir /b /s package.json)",
+      "Bash(git pull origin main --allow-unrelated-histories)"
     ]
   }
 }
