@@ -7,7 +7,10 @@ const getApiKeys = (): string[] => {
   console.log('[DEBUG] 원본 환경 변수:', apiKey);
   console.log('[DEBUG] 환경 변수 길이:', apiKey.length);
   // 쉼표로 구분된 여러 키 지원
-  const keys = apiKey.split(',').map(key => key.trim()).filter(key => key.length > 0);
+  const keys = apiKey.split(',')
+    .map(key => key.trim())
+    .map(key => key.replace(/^["']|["']$/g, '')) // 앞뒤 따옴표 제거
+    .filter(key => key.length > 0);
   console.log('[DEBUG] 분리된 키 배열:', keys.map(k => k.substring(0, 20) + '...'));
   return keys.length > 0 ? keys : [];
 };
