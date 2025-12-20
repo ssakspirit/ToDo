@@ -4,8 +4,11 @@ import { TaskDetails } from "../types";
 // 여러 API 키 지원 (쉼표로 구분)
 const getApiKeys = (): string[] => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  console.log('[DEBUG] 원본 환경 변수:', apiKey);
+  console.log('[DEBUG] 환경 변수 길이:', apiKey.length);
   // 쉼표로 구분된 여러 키 지원
   const keys = apiKey.split(',').map(key => key.trim()).filter(key => key.length > 0);
+  console.log('[DEBUG] 분리된 키 배열:', keys.map(k => k.substring(0, 20) + '...'));
   return keys.length > 0 ? keys : [];
 };
 
