@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: AI To-Do 생성기\n\n- 텍스트/이미지 AI 분석 기능 (Google Gemini)\n- Microsoft To Do 자동 연동\n- 다크모드 기본 적용\n- 심플하고 세련된 미니멀 디자인\n- 기프티콘 자동 인식\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)",
+      "WebSearch",
+      "Bash(cat:*)"
+    ]
+  }
+}
