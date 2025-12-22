@@ -1,1 +1,1 @@
-📝 README에 다양한 예시 입력 텍스트 추가
+🔧 .env.example에 Google Client ID 추가 및 주석 개선
