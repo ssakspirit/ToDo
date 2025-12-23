@@ -25,6 +25,120 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ];
 
+// Token refresh timer
+let tokenRefreshTimer: number | null = null;
+
+// Schedule token refresh before expiration
+const scheduleTokenRefresh = (expiresAt: number) => {
+  // Clear existing timer
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+  }
+
+  // Calculate time until token expires (refresh 5 minutes before expiration)
+  const refreshTime = expiresAt - Date.now() - 5 * 60 * 1000;
+
+  if (refreshTime > 0) {
+    tokenRefreshTimer = window.setTimeout(async () => {
+      console.log('토큰 자동 갱신 시도...');
+      try {
+        await refreshTokenSilently();
+      } catch (error) {
+        console.error('토큰 자동 갱신 실패:', error);
+      }
+    }, refreshTime);
+  }
+};
+
+// Silently refresh token using prompt=none in a small popup
+const refreshTokenSilently = (): Promise<GoogleAccountInfo | null> => {
+  return new Promise((resolve, reject) => {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.append('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.append('redirect_uri', window.location.origin);
+    authUrl.searchParams.append('response_type', 'token');
+    authUrl.searchParams.append('scope', SCOPES.join(' '));
+    authUrl.searchParams.append('prompt', 'none'); // No user interaction
+
+    // Open a small, hidden popup
+    const width = 1;
+    const height = 1;
+    const left = -1000;
+    const top = -1000;
+
+    const popup = window.open(
+      authUrl.toString(),
+      'Google Token Refresh',
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
+
+    if (!popup) {
+      reject(new Error('팝업이 차단되었습니다.'));
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (popup && !popup.closed) {
+        popup.close();
+      }
+      reject(new Error('토큰 갱신 타임아웃'));
+    }, 10000);
+
+    // Check for OAuth redirect
+    const checkPopup = setInterval(() => {
+      try {
+        if (popup.closed) {
+          clearInterval(checkPopup);
+          clearTimeout(timeout);
+          reject(new Error('토큰 갱신이 취소되었습니다.'));
+          return;
+        }
+
+        // Check if popup redirected back to our domain
+        if (popup.location.origin === window.location.origin) {
+          const hash = popup.location.hash;
+          clearInterval(checkPopup);
+          clearTimeout(timeout);
+          popup.close();
+
+          if (hash && hash.includes('access_token')) {
+            const params = new URLSearchParams(hash.substring(1));
+            const accessToken = params.get('access_token');
+            const expiresIn = parseInt(params.get('expires_in') || '3600');
+            const scope = params.get('scope') || '';
+
+            if (accessToken) {
+              const tokenInfo: StoredTokenInfo = {
+                accessToken,
+                expiresAt: Date.now() + expiresIn * 1000,
+                scope,
+              };
+              localStorage.setItem(GOOGLE_AUTH_KEY, JSON.stringify(tokenInfo));
+              scheduleTokenRefresh(tokenInfo.expiresAt);
+
+              getUserInfo(accessToken)
+                .then(resolve)
+                .catch(reject);
+            } else {
+              reject(new Error('액세스 토큰을 받지 못했습니다.'));
+            }
+          } else if (hash && hash.includes('error')) {
+            // Check for errors (e.g., user not logged in to Google)
+            const params = new URLSearchParams(hash.substring(1));
+            const error = params.get('error');
+            console.error('토큰 갱신 오류:', error);
+            reject(new Error(`토큰 갱신 실패: ${error}`));
+          } else {
+            reject(new Error('토큰 갱신에 실패했습니다.'));
+          }
+        }
+      } catch (e) {
+        // Cross-origin error, popup not on our domain yet
+      }
+    }, 100);
+  });
+};
+
 // Google OAuth 2.0 popup login
 export const loginGoogle = (): Promise<GoogleAccountInfo | null> => {
   return new Promise((resolve, reject) => {
@@ -81,6 +195,9 @@ export const loginGoogle = (): Promise<GoogleAccountInfo | null> => {
               };
               localStorage.setItem(GOOGLE_AUTH_KEY, JSON.stringify(tokenInfo));
 
+              // Schedule automatic token refresh
+              scheduleTokenRefresh(tokenInfo.expiresAt);
+
               // Get user info
               getUserInfo(accessToken)
                 .then(resolve)
@@ -109,11 +226,28 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
   try {
     const tokenInfo: StoredTokenInfo = JSON.parse(stored);
 
-    // Check if token is expired
-    if (Date.now() >= tokenInfo.expiresAt - 60000) { // 1 minute buffer
+    // Check if token is expired or expiring soon (within 10 minutes)
+    const timeUntilExpiry = tokenInfo.expiresAt - Date.now();
+
+    if (timeUntilExpiry <= 0) {
       // Token expired, remove it
       localStorage.removeItem(GOOGLE_AUTH_KEY);
       return null;
+    }
+
+    // Schedule automatic refresh for this token
+    scheduleTokenRefresh(tokenInfo.expiresAt);
+
+    // If token is expiring soon (within 10 minutes), try to refresh it now
+    if (timeUntilExpiry < 10 * 60 * 1000) {
+      console.log('토큰이 곧 만료됩니다. 자동 갱신 시도...');
+      try {
+        return await refreshTokenSilently();
+      } catch (error) {
+        console.error('토큰 갱신 실패, 기존 토큰 사용:', error);
+        // If refresh fails, still use the current token if it's valid
+        return await getUserInfo(tokenInfo.accessToken);
+      }
     }
 
     // Token is valid, get user info
@@ -127,6 +261,11 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
 
 // Logout
 export const logoutGoogle = async (): Promise<void> => {
+  // Clear refresh timer
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
   localStorage.removeItem(GOOGLE_AUTH_KEY);
 };
 
@@ -140,11 +279,14 @@ export const getGoogleAccount = async (): Promise<GoogleAccountInfo | null> => {
   try {
     const tokenInfo: StoredTokenInfo = JSON.parse(stored);
 
-    // Check if token is still valid
-    if (Date.now() >= tokenInfo.expiresAt - 60000) {
+    // Check if token is expired
+    if (Date.now() >= tokenInfo.expiresAt) {
       localStorage.removeItem(GOOGLE_AUTH_KEY);
       return null;
     }
+
+    // Schedule automatic refresh for this token
+    scheduleTokenRefresh(tokenInfo.expiresAt);
 
     return await getUserInfo(tokenInfo.accessToken);
   } catch (error) {
@@ -163,9 +305,18 @@ export const getGoogleAccessToken = async (): Promise<string> => {
   const tokenInfo: StoredTokenInfo = JSON.parse(stored);
 
   // Check if token is expired
-  if (Date.now() >= tokenInfo.expiresAt - 60000) {
+  if (Date.now() >= tokenInfo.expiresAt) {
     localStorage.removeItem(GOOGLE_AUTH_KEY);
     throw new Error('토큰이 만료되었습니다. 다시 로그인해주세요.');
+  }
+
+  // If token is expiring soon (within 5 minutes), try to refresh it in background
+  const timeUntilExpiry = tokenInfo.expiresAt - Date.now();
+  if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {
+    console.log('토큰이 곧 만료됩니다. 백그라운드에서 갱신 시도...');
+    refreshTokenSilently().catch(error => {
+      console.error('백그라운드 토큰 갱신 실패:', error);
+    });
   }
 
   return tokenInfo.accessToken;

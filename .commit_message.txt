@@ -1,1 +1,1 @@
-🔧 .env.example에 Google Client ID 추가 및 주석 개선
+✨ 구글 로그인 자동 갱신 기능 추가하여 세션 유지 개선
