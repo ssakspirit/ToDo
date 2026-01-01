@@ -76,7 +76,9 @@ const refreshAccessToken = async (refreshToken: string): Promise<StoredTokenInfo
   };
 
   localStorage.setItem(GOOGLE_AUTH_KEY, JSON.stringify(tokenInfo));
-  console.log('토큰 갱신 성공');
+  console.log('✅ 토큰 갱신 성공!');
+  console.log('  - 새 access token:', data.access_token ? '✓' : '✗');
+  console.log('  - 새 만료 시간:', new Date(tokenInfo.expiresAt).toLocaleString('ko-KR'));
   return tokenInfo;
 };
 
@@ -96,7 +98,7 @@ export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('scope', SCOPES.join(' '));
     authUrl.searchParams.append('access_type', 'offline'); // Request refresh token
-    authUrl.searchParams.append('prompt', 'consent'); // Force consent to get refresh token
+    authUrl.searchParams.append('prompt', 'consent'); // Force consent to always get refresh token
     authUrl.searchParams.append('code_challenge', codeChallenge);
     authUrl.searchParams.append('code_challenge_method', 'S256');
 
@@ -188,7 +190,10 @@ const exchangeCodeForTokens = async (
     localStorage.setItem(GOOGLE_AUTH_KEY, JSON.stringify(tokenInfo));
     sessionStorage.removeItem('google_code_verifier');
 
-    console.log('Google 로그인 성공, refresh token 획득:', !!data.refresh_token);
+    console.log('✅ Google 로그인 성공!');
+    console.log('  - Access token:', data.access_token ? '✓' : '✗');
+    console.log('  - Refresh token:', data.refresh_token ? '✓ (획득)' : '✗ (없음)');
+    console.log('  - 만료 시간:', new Date(tokenInfo.expiresAt).toLocaleString('ko-KR'));
 
     // Get user info
     return await getUserInfo(data.access_token);
@@ -208,23 +213,24 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
   try {
     let tokenInfo: StoredTokenInfo = JSON.parse(stored);
 
+    // Check if this is an old token without refresh token (from Implicit Flow)
+    if (!tokenInfo.refreshToken) {
+      console.warn('이전 방식의 토큰입니다. Refresh token이 없으므로 재로그인이 필요합니다.');
+      localStorage.removeItem(GOOGLE_AUTH_KEY);
+      return null;
+    }
+
     // Check if token is expired
     if (Date.now() >= tokenInfo.expiresAt) {
       console.log('Google access token이 만료되었습니다.');
 
       // Try to refresh using refresh token
-      if (tokenInfo.refreshToken) {
-        console.log('Refresh token으로 자동 갱신 시도...');
-        try {
-          tokenInfo = await refreshAccessToken(tokenInfo.refreshToken);
-          console.log('토큰 자동 갱신 성공!');
-        } catch (error) {
-          console.error('토큰 갱신 실패:', error);
-          localStorage.removeItem(GOOGLE_AUTH_KEY);
-          return null;
-        }
-      } else {
-        console.log('Refresh token이 없습니다. 재로그인이 필요합니다.');
+      console.log('Refresh token으로 자동 갱신 시도...');
+      try {
+        tokenInfo = await refreshAccessToken(tokenInfo.refreshToken);
+        console.log('✅ 토큰 자동 갱신 성공!');
+      } catch (error) {
+        console.error('❌ 토큰 갱신 실패:', error);
         localStorage.removeItem(GOOGLE_AUTH_KEY);
         return null;
       }
@@ -232,10 +238,10 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
 
     // Token is valid, get user info
     const userInfo = await getUserInfo(tokenInfo.accessToken);
-    console.log('Google 자동 로그인 성공:', userInfo.email);
+    console.log('✅ Google 자동 로그인 성공:', userInfo.email);
     return userInfo;
   } catch (error) {
-    console.error('Google 자동 로그인 실패:', error);
+    console.error('❌ Google 자동 로그인 실패:', error);
     localStorage.removeItem(GOOGLE_AUTH_KEY);
     return null;
   }
