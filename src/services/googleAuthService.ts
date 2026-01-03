@@ -26,6 +26,17 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ];
 
+// Helper: Safely check if popup is closed (handles COOP errors)
+const isPopupClosed = (popup: Window | null): boolean => {
+  if (!popup) return true;
+  try {
+    return popup.closed;
+  } catch (e) {
+    // If we can't access popup.closed due to COOP, assume it's still open
+    return false;
+  }
+};
+
 // PKCE utility functions
 const generateCodeVerifier = (): string => {
   const array = new Uint8Array(32);
@@ -118,11 +129,23 @@ export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
       return;
     }
 
+    // Set timeout to prevent infinite waiting
+    const timeoutId = setTimeout(() => {
+      clearInterval(checkPopup);
+      if (popup && !isPopupClosed(popup)) {
+        popup.close();
+      }
+      sessionStorage.removeItem('google_code_verifier');
+      reject(new Error('로그인 시간이 초과되었습니다.'));
+    }, 120000); // 2 minutes timeout
+
     // Listen for OAuth redirect
     const checkPopup = setInterval(() => {
       try {
-        if (popup.closed) {
+        // Try to check if popup is closed (may fail due to COOP)
+        if (isPopupClosed(popup)) {
           clearInterval(checkPopup);
+          clearTimeout(timeoutId);
           sessionStorage.removeItem('google_code_verifier');
           reject(new Error('로그인이 취소되었습니다.'));
           return;
@@ -133,6 +156,7 @@ export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
           const searchParams = new URLSearchParams(popup.location.search);
           const code = searchParams.get('code');
           clearInterval(checkPopup);
+          clearTimeout(timeoutId);
           popup.close();
 
           if (code) {
@@ -147,6 +171,7 @@ export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
         }
       } catch (e) {
         // Cross-origin error, popup not on our domain yet
+        // This is expected and can be safely ignored
       }
     }, 500);
   });

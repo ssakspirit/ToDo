@@ -1,1 +1,1 @@
-🐛 구글 로그인 안정성 개선 및 디버깅 로그 추가
+🔧 Cross-Origin-Opener-Policy 에러 수정 및 팝업 체크 로직 개선
