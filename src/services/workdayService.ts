@@ -194,11 +194,14 @@ export async function getMonthlyWorkdayStats(
     cur = addDays(cur, 1);
   }
 
-  // 내일부터 월말까지: 근무 가능일
+  // 내일부터 월말까지: 근무 가능일 + 미래 복무사용일 분리 계산
   let availableWorkdays = 0;
   cur = addDays(today, 1);
   while (cur <= monthEnd) {
-    if (isScheduledDay(cur)) availableWorkdays++;
+    if (isScheduledDay(cur)) {
+      if (leaveDateSet.has(dateKey(cur))) leaveUsed++; // 미래 연가/병가 등도 합산
+      else availableWorkdays++;
+    }
     cur = addDays(cur, 1);
   }
 
