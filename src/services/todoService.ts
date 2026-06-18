@@ -165,12 +165,11 @@ export const createTaskWithDueDate = async (
   });
 };
 
-// 목록 한 번 조회 후 $batch로 모든 작업을 한 번에 가져옴
+// 목록 한 번 조회 후 작업 조회를 병렬로 처리
 export const loadAllTasks = async (
   scheduleListName: string,
   excludeListNames: string[]
 ): Promise<{ scheduleTasks: ScheduleTask[]; todoTasks: TodoTask[] }> => {
-  const accessToken = await getAccessToken();
   const client = await getGraphClient();
 
   // 1. 목록 한 번만 조회
@@ -182,64 +181,36 @@ export const loadAllTasks = async (
     (l) => l.displayName !== scheduleListName && !excludeListNames.includes(l.displayName)
   );
 
-  // 2. $batch 요청 목록 구성
-  interface BatchReq { id: string; method: string; url: string; }
-  const requests: BatchReq[] = [];
-  const idToList = new Map<string, TodoList | null>(); // null = scheduleList
+  // 2. 일정 목록 + 할 일 목록 전체 병렬 조회
+  const [scheduleRes, todoResults] = await Promise.all([
+    scheduleList
+      ? client.api(`/me/todo/lists/${scheduleList.id}/tasks`).query({ $top: 200 }).get()
+      : Promise.resolve({ value: [] }),
+    Promise.all(
+      filteredLists.map((list) =>
+        client
+          .api(`/me/todo/lists/${list.id}/tasks`)
+          .query({ $filter: "status ne 'completed'", $top: 200, $select: 'id,title,dueDateTime,status' })
+          .get()
+          .then((res) => ({ list, items: res.value as any[] }))
+          .catch(() => ({ list, items: [] as any[] }))
+      )
+    ),
+  ]);
 
-  let idx = 0;
-  if (scheduleList) {
-    const id = String(idx++);
-    requests.push({ id, method: 'GET', url: `/me/todo/lists/${scheduleList.id}/tasks?$top=200` });
-    idToList.set(id, null);
-  }
-  filteredLists.forEach((list) => {
-    const id = String(idx++);
-    requests.push({
-      id,
-      method: 'GET',
-      url: `/me/todo/lists/${list.id}/tasks?$filter=status ne 'completed'&$top=200&$select=id,title,dueDateTime,status`,
-    });
-    idToList.set(id, list);
-  });
+  const scheduleTasks: ScheduleTask[] = (scheduleRes.value as any[]).map((t) => ({
+    id: t.id, title: t.title, body: t.body?.content,
+    dueDateTime: t.dueDateTime?.dateTime, status: t.status,
+    importance: t.importance, createdDateTime: t.createdDateTime,
+  }));
 
-  if (requests.length === 0) return { scheduleTasks: [], todoTasks: [] };
-
-  // 3. 20개씩 $batch 전송
-  const scheduleTasks: ScheduleTask[] = [];
-  const todoTasks: TodoTask[] = [];
-
-  for (let i = 0; i < requests.length; i += 20) {
-    const chunk = requests.slice(i, i + 20);
-    const res = await fetch('https://graph.microsoft.com/v1.0/$batch', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests: chunk }),
-    });
-    if (!res.ok) continue;
-
-    const data = await res.json();
-    for (const resp of data.responses as any[]) {
-      if (resp.status !== 200) continue;
-      const items: any[] = resp.body?.value ?? [];
-      const list = idToList.get(resp.id);
-      if (list === undefined) continue;
-
-      if (list === null) {
-        items.forEach((t: any) => scheduleTasks.push({
-          id: t.id, title: t.title, body: t.body?.content,
-          dueDateTime: t.dueDateTime?.dateTime, status: t.status,
-          importance: t.importance, createdDateTime: t.createdDateTime,
-        }));
-      } else {
-        items.forEach((t: any) => todoTasks.push({
-          id: t.id, title: t.title,
-          dueDate: t.dueDateTime?.dateTime ? parseDueDateUtc(t.dueDateTime.dateTime) : null,
-          listId: list.id, listName: list.displayName,
-        }));
-      }
-    }
-  }
+  const todoTasks: TodoTask[] = todoResults.flatMap(({ list, items }) =>
+    items.map((t) => ({
+      id: t.id, title: t.title,
+      dueDate: t.dueDateTime?.dateTime ? parseDueDateUtc(t.dueDateTime.dateTime) : null,
+      listId: list.id, listName: list.displayName,
+    }))
+  );
 
   return { scheduleTasks, todoTasks };
 };

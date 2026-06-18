@@ -1,1 +1,1 @@
-⚡ MS Graph $batch 적용 - 목록 조회 1회·작업 요청 병합으로 API 호출 횟수 대폭 감소
+🔧 loadAllTasks 안정화 - $batch 대신 Graph 클라이언트 병렬 조회로 데이터 로드 복구
