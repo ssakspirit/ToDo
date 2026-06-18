@@ -341,8 +341,8 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
             })}
           </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+        {/* Legend + 주요 일정 */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
           {[
             { cls: 'text-red-400',    label: '공휴일' },
             { cls: 'text-indigo-400', label: '방학' },
@@ -354,32 +354,22 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
               {label}
             </span>
           ))}
-        </div>
-      </div>
-
-      {/* 주요 일정 */}
-      {overview && (
-        <div className={`${card} px-4 py-2.5`}>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="font-medium text-slate-500 dark:text-slate-500 flex-shrink-0">
-              주요 일정
-            </span>
-            {overview.keyEvents.length === 0 ? (
-              <span className="text-slate-400 dark:text-slate-600">이달 특이 일정 없음</span>
-            ) : (
-              overview.keyEvents.map((ev, i) => {
+          {overview && overview.keyEvents.length > 0 && (
+            <>
+              <span className="text-[10px] text-slate-200 dark:text-slate-700 select-none">|</span>
+              {overview.keyEvents.map((ev, i) => {
                 const d = ev.date;
                 const label = `${d.getMonth() + 1}/${d.getDate()}(${DAY_KR[d.getDay()]})`;
                 return (
-                  <span key={i} className={`flex-shrink-0 ${typeColorMap[ev.type as keyof typeof typeColorMap]}`}>
+                  <span key={i} className={`text-[10px] flex-shrink-0 ${typeColorMap[ev.type]}`}>
                     {label} {ev.name}
                   </span>
                 );
-              })
-            )}
-          </div>
+              })}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* 정액분 */}
       {stats && (
