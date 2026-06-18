@@ -65,6 +65,44 @@ function getEventLabelColor(info: DayInfo): string {
   }
 }
 
+interface TaskListProps {
+  title: string;
+  tasks: TodoTask[];
+  completingIds: Set<string>;
+  onComplete: (t: TodoTask) => void;
+  card: string;
+}
+
+const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card }) => (
+  <div className={`${card} px-4 py-3`}>
+    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>
+    <ul className="space-y-2">
+      {tasks.map((t) => {
+        const completing = completingIds.has(t.id);
+        return (
+          <li key={t.id} className={`flex items-start gap-2 text-xs transition-opacity duration-300 ${completing ? 'opacity-40' : 'opacity-100'}`}>
+            <button
+              onClick={() => onComplete(t)}
+              disabled={completing}
+              className={`flex-shrink-0 mt-px w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
+                ${completing
+                  ? 'border-emerald-500 bg-emerald-500'
+                  : 'border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500'
+                }`}
+            >
+              {completing && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+            </button>
+            <div className="flex flex-col min-w-0">
+              <span className="text-slate-700 dark:text-slate-300 leading-snug">{t.title}</span>
+              <span className="text-slate-400 dark:text-slate-600 text-[10px]">{t.listName}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  </div>
+);
+
 const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComplete, onRefresh }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -107,11 +145,17 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
   const tasksByDate = useMemo(() => {
     const map = new Map<string, TodoTask[]>();
     todoTasks.forEach((t) => {
+      if (!t.dueDate) return;
       if (!map.has(t.dueDate)) map.set(t.dueDate, []);
       map.get(t.dueDate)!.push(t);
     });
     return map;
   }, [todoTasks]);
+
+  const noDateTasks = useMemo(
+    () => todoTasks.filter((t) => !t.dueDate),
+    [todoTasks]
+  );
 
   const load = useCallback(
     async (year: number, month: number) => {
@@ -365,44 +409,14 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
       {selectedDate && tasksByDate.has(selectedDate) && (() => {
         const [sy, sm, sd] = selectedDate.split('-').map(Number);
         const selDate = new Date(sy, sm - 1, sd);
-        const label = `${sm}월 ${sd}일 (${DAY_KR[selDate.getDay()]})`;
-        const tasks = tasksByDate.get(selectedDate)!;
-        return (
-          <div className={`${card} px-4 py-3`}>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-              {label} 기한 작업
-            </p>
-            <ul className="space-y-2">
-              {tasks.map((t) => {
-                const completing = completingIds.has(t.id);
-                return (
-                  <li key={t.id} className={`flex items-start gap-2 text-xs transition-opacity duration-300 ${completing ? 'opacity-40' : 'opacity-100'}`}>
-                    <button
-                      onClick={() => handleComplete(t)}
-                      disabled={completing}
-                      className={`flex-shrink-0 mt-px w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
-                        ${completing
-                          ? 'border-emerald-500 bg-emerald-500'
-                          : 'border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500'
-                        }`}
-                    >
-                      {completing && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-                    </button>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-slate-700 dark:text-slate-300 leading-snug">
-                        {t.title}
-                      </span>
-                      <span className="text-slate-400 dark:text-slate-600 text-[10px]">
-                        {t.listName}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
+        const label = `${sm}월 ${sd}일 (${DAY_KR[selDate.getDay()]}) 기한 작업`;
+        return <TaskList title={label} tasks={tasksByDate.get(selectedDate)!} completingIds={completingIds} onComplete={handleComplete} card={card} />;
       })()}
+
+      {/* 기한 없는 작업 */}
+      {noDateTasks.length > 0 && (
+        <TaskList title="기한 없는 작업" tasks={noDateTasks} completingIds={completingIds} onComplete={handleComplete} card={card} />
+      )}
     </div>
   );
 };

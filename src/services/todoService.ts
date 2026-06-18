@@ -87,7 +87,7 @@ export interface ScheduleTask {
 export interface TodoTask {
   id: string;
   title: string;
-  dueDate: string; // YYYY-MM-DD
+  dueDate: string | null; // YYYY-MM-DD, or null if no due date
   listId: string;
   listName: string;
 }
@@ -119,17 +119,13 @@ export const getAllTasksWithDueDates = async (
             .api(`/me/todo/lists/${list.id}/tasks`)
             .query({ $filter: "status ne 'completed'", $top: 200 })
             .get();
-          const todayKey = (() => {
-            const d = new Date();
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          })();
           return (res.value as any[])
             .map((t) => ({
               id: t.id,
               title: t.title,
               dueDate: t.dueDateTime?.dateTime
                 ? parseDueDateUtc(t.dueDateTime.dateTime)
-                : todayKey,
+                : null,
               listId: list.id,
               listName: list.displayName,
             }));
