@@ -383,41 +383,17 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
 
       {/* 정액분 */}
       {stats && (
-        <div className={`${card} px-4 py-2.5 space-y-1`}>
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-slate-600 dark:text-slate-400">이번 달 정액분</span>
-            <span className={`font-semibold ${statusStyle[stats.status]}`}>
-              {stats.status}
+        <div className={`${card} px-4 py-2.5`}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-500">
+            <span className="text-slate-600 dark:text-slate-400 flex-shrink-0">
+              이번 달 정액분{' '}
+              <span className={`font-semibold ${statusStyle[stats.status]}`}>{stats.status}</span>
             </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-500">
-            <span>
-              현재 근무일{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({stats.currentWorkdays})
-              </span>
-            </span>
-            <span>
-              근무 가능일:{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({stats.availableWorkdays})
-              </span>
-            </span>
-            <span>
-              복무 사용일{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({stats.leaveUsed})
-              </span>
-            </span>
-            <span>
-              복무 사용 가능일{' '}
-              <span
-                className={`font-semibold ${
-                  stats.availableLeave === 0
-                    ? 'text-red-500 dark:text-red-400'
-                    : 'text-sky-500 dark:text-sky-400'
-                }`}
-              >
+            <span>현재 근무일 <span className="font-medium text-slate-700 dark:text-slate-300">({stats.currentWorkdays})</span></span>
+            <span>근무 가능일 <span className="font-medium text-slate-700 dark:text-slate-300">({stats.availableWorkdays})</span></span>
+            <span>복무 사용일 <span className="font-medium text-slate-700 dark:text-slate-300">({stats.leaveUsed})</span></span>
+            <span>복무 사용 가능일{' '}
+              <span className={`font-semibold ${stats.availableLeave === 0 ? 'text-red-500 dark:text-red-400' : 'text-sky-500 dark:text-sky-400'}`}>
                 ({stats.availableLeave})
               </span>
             </span>
