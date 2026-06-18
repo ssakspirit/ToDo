@@ -79,7 +79,7 @@ const App: React.FC = () => {
     try {
       const [tasks, todos] = await Promise.all([
         getAllScheduleTasks('학사일정복무'),
-        getAllTasksWithDueDates(['학사일정복무']),
+        getAllTasksWithDueDates(['학사일정복무', '영상제작', '교육과정수립운영', '학교자율시간', '기초학력업무', '부산여행', '보관']),
       ]);
       setScheduleTasks(tasks);
       setTodoTasks(todos);
