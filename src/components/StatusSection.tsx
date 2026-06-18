@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, RefreshCw } from 'lucide-react';
 import { ScheduleTask, TodoTask, completeTask } from '../services/todoService';
 import {
   MonthlyWorkdayStats,
@@ -14,6 +14,7 @@ interface Props {
   scheduleTasks: ScheduleTask[];
   todoTasks: TodoTask[];
   onTaskComplete: (id: string) => void;
+  onRefresh: () => Promise<void>;
 }
 
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -64,7 +65,7 @@ function getEventLabelColor(info: DayInfo): string {
   }
 }
 
-const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComplete }) => {
+const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComplete, onRefresh }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -76,6 +77,17 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, onRefresh]);
 
   const handleComplete = useCallback(async (task: TodoTask) => {
     if (completingIds.has(task.id)) return;
@@ -156,12 +168,14 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
       <div className={`${card} px-3 py-2.5`}>
         {/* Month navigation */}
         <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={prevMonth}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={prevMonth}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
           <div className="text-center">
             <span className="text-base font-bold text-slate-800 dark:text-slate-100">
               {viewMonth}월
@@ -176,12 +190,22 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
               </span>
             )}
           </div>
-          <button
-            onClick={nextMonth}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={nextMonth}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors ml-0.5"
+              title="새로고침"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {/* Weekday headers */}

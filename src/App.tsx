@@ -786,6 +786,7 @@ const App: React.FC = () => {
               scheduleTasks={scheduleTasks}
               todoTasks={todoTasks}
               onTaskComplete={(id) => setTodoTasks((prev) => prev.filter((t) => t.id !== id))}
+              onRefresh={loadWorkdayCountdown}
             />
           )}
 
