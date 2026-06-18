@@ -1,1 +1,1 @@
-🔧 Cross-Origin-Opener-Policy 에러 수정 및 팝업 체크 로직 개선
+🔧 공휴일 API XML 포맷 파싱 및 인증키 적용

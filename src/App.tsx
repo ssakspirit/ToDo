@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AnalysisStatus, AnalyzedTask, AuthState, TaskDetails } from './types';
 import { analyzeContent } from './services/geminiService';
+import { getTodayHolidayName } from './services/holidayService';
 import { login, logout, getAccount, loginSilently } from './services/authService';
 import {
   loginGoogle,
@@ -50,6 +51,8 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(true);
+  const [todayLabel, setTodayLabel] = useState<string>('');
+  const [holidayName, setHolidayName] = useState<string | null>(null);
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>({
@@ -67,6 +70,16 @@ const App: React.FC = () => {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
   
   const [isSending, setIsSending] = useState(false);
+
+  // Initialize today's date label and holiday
+  useEffect(() => {
+    const today = new Date();
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const label = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 (${days[today.getDay()]})`;
+    setTodayLabel(label);
+
+    getTodayHolidayName().then((name) => setHolidayName(name));
+  }, []);
 
   // Check auth on mount and try auto-login for both services
   useEffect(() => {
@@ -553,9 +566,23 @@ const App: React.FC = () => {
           <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckSquare className="w-5 h-5 text-slate-400 dark:text-slate-600" />
-              <h1 className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                To-Do
-              </h1>
+              <div>
+                <h1 className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  To-Do
+                </h1>
+                {todayLabel && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                      {todayLabel}
+                    </span>
+                    {holidayName && (
+                      <span className="text-xs font-medium text-red-500 dark:text-red-400">
+                        · {holidayName}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1">
               {!authState.isMicrosoftAuthenticated && (
