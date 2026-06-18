@@ -1,1 +1,1 @@
-🔧 loadAllTasks 안정화 - $batch 대신 Graph 클라이언트 병렬 조회로 데이터 로드 복구
+🐛 $select+$filter 400 오류 수정 - To-Do API 호환성 문제로 $select 제거

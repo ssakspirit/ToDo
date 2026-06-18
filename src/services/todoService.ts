@@ -190,7 +190,7 @@ export const loadAllTasks = async (
       filteredLists.map((list) =>
         client
           .api(`/me/todo/lists/${list.id}/tasks`)
-          .query({ $filter: "status ne 'completed'", $top: 200, $select: 'id,title,dueDateTime,status' })
+          .query({ $filter: "status ne 'completed'", $top: 200 })
           .get()
           .then((res) => ({ list, items: res.value as any[] }))
           .catch(() => ({ list, items: [] as any[] }))
