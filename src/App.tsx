@@ -90,6 +90,28 @@ const App: React.FC = () => {
     }
   };
 
+  // 탭 포커스 복귀 및 주기적 폴링으로 근무 현황 자동 갱신
+  useEffect(() => {
+    const isMsAuth = authState.isMicrosoftAuthenticated;
+    if (!isMsAuth) return;
+
+    const refresh = () => loadWorkdayCountdown();
+
+    // 탭이 다시 보일 때 갱신
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    // 5분마다 폴링
+    const intervalId = setInterval(refresh, 5 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      clearInterval(intervalId);
+    };
+  }, [authState.isMicrosoftAuthenticated]);
+
   // Initialize today's date label and holiday
   useEffect(() => {
     const today = new Date();
