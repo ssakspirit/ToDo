@@ -27,6 +27,7 @@ import {
   createTasksInBatch,
   getAllScheduleTasks,
   TodoList,
+  ScheduleTask,
 } from './services/todoService';
 import {
   createEventsInBatch,
@@ -35,7 +36,6 @@ import {
 } from './services/calendarService';
 import TaskCard from './components/TaskCard';
 import StatusSection from './components/StatusSection';
-import { getMonthlyWorkdayStats, getMonthOverview, MonthlyWorkdayStats, MonthOverview } from './services/workdayService';
 
 interface Attachment {
   id: string;
@@ -69,20 +69,14 @@ const App: React.FC = () => {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
   
   const [isSending, setIsSending] = useState(false);
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyWorkdayStats | null>(null);
-  const [monthOverview, setMonthOverview] = useState<MonthOverview | null>(null);
+  const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
 
   const loadWorkdayCountdown = async () => {
     try {
       const tasks = await getAllScheduleTasks('학사일정복무');
-      const [stats, overview] = await Promise.all([
-        getMonthlyWorkdayStats(tasks),
-        getMonthOverview(tasks),
-      ]);
-      setMonthlyStats(stats);
-      setMonthOverview(overview);
+      setScheduleTasks(tasks);
     } catch (e) {
-      console.error('근무 현황 계산 실패:', e);
+      console.error('일정 로드 실패:', e);
     }
   };
 
@@ -780,8 +774,8 @@ const App: React.FC = () => {
           </section>
 
           {/* Status Section */}
-          {authState.isMicrosoftAuthenticated && (monthOverview || monthlyStats) && (
-            <StatusSection monthOverview={monthOverview} monthlyStats={monthlyStats} />
+          {authState.isMicrosoftAuthenticated && (
+            <StatusSection scheduleTasks={scheduleTasks} />
           )}
 
           {/* Results Section */}

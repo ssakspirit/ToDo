@@ -51,12 +51,95 @@ export interface MonthlyWorkdayStats {
   status: '목표 달성' | '도전중' | '달성 실패';
 }
 
-export async function getMonthlyWorkdayStats(tasks: ScheduleTask[]): Promise<MonthlyWorkdayStats> {
+export interface DayInfo {
+  type: 'workday' | 'holiday' | 'vacation' | 'closure' | 'leave' | 'weekend';
+  events: string[];
+}
+
+export async function getMonthCalendarData(
+  tasks: ScheduleTask[],
+  year: number,
+  month: number // 1-12
+): Promise<Map<string, DayInfo>> {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+
+  const apiHolidays = await getHolidayInfoInRange(monthStart, monthEnd);
+  const holidayMap = new Map<string, string>();
+  apiHolidays.forEach((h) => holidayMap.set(h.date, h.name));
+
+  const closureDates = new Set(
+    getDates(tasks, '휴업')
+      .filter((d) => d.getFullYear() === year && d.getMonth() === month - 1)
+      .map(dateKey)
+  );
+
+  const LEAVE_TITLES = ['연가', '병가', '조퇴', '지각', '병조퇴', '병지각'];
+  const leaveDateMap = new Map<string, string[]>();
+  LEAVE_TITLES.forEach((title) => {
+    getDates(tasks, title)
+      .filter((d) => d.getFullYear() === year && d.getMonth() === month - 1)
+      .forEach((d) => {
+        const k = dateKey(d);
+        if (!leaveDateMap.has(k)) leaveDateMap.set(k, []);
+        leaveDateMap.get(k)!.push(title);
+      });
+  });
+
+  const summerStart = getDate(tasks, '여름방학시작');
+  const summerEnd = getDate(tasks, '여름방학종료');
+  const winterStart = getDate(tasks, '겨울방학시작');
+  const winterEnd = getDate(tasks, '겨울방학종료');
+
+  const isVacation = (d: Date) => {
+    if (summerStart && summerEnd && d >= summerStart && d <= summerEnd) return true;
+    if (winterStart && winterEnd && d >= winterStart && d <= winterEnd) return true;
+    return false;
+  };
+
+  const result = new Map<string, DayInfo>();
+  let cur = new Date(monthStart);
+  while (cur <= monthEnd) {
+    const k = dateKey(cur);
+    const isWeekend = cur.getDay() === 0 || cur.getDay() === 6;
+    const events: string[] = [];
+    let type: DayInfo['type'];
+
+    if (isWeekend) {
+      type = 'weekend';
+      if (holidayMap.has(k)) events.push(holidayMap.get(k)!);
+    } else if (holidayMap.has(k)) {
+      type = 'holiday';
+      events.push(holidayMap.get(k)!);
+    } else if (isVacation(cur)) {
+      type = 'vacation';
+      events.push('방학');
+    } else if (closureDates.has(k)) {
+      type = 'closure';
+      events.push('휴업');
+    } else if (leaveDateMap.has(k)) {
+      type = 'leave';
+      events.push(...leaveDateMap.get(k)!);
+    } else {
+      type = 'workday';
+    }
+
+    result.set(k, { type, events });
+    cur = addDays(cur, 1);
+  }
+  return result;
+}
+
+export async function getMonthlyWorkdayStats(
+  tasks: ScheduleTask[],
+  targetYear?: number,
+  targetMonth?: number // 1-12
+): Promise<MonthlyWorkdayStats> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const year = targetYear ?? today.getFullYear();
+  const month = targetMonth != null ? targetMonth - 1 : today.getMonth(); // 0-indexed
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
 
@@ -140,10 +223,14 @@ export interface MonthOverview {
   vacationDays: number; // 방학 일수 (평일 기준)
 }
 
-export async function getMonthOverview(tasks: ScheduleTask[]): Promise<MonthOverview> {
+export async function getMonthOverview(
+  tasks: ScheduleTask[],
+  targetYear?: number,
+  targetMonth?: number // 1-12
+): Promise<MonthOverview> {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+  const year = targetYear ?? today.getFullYear();
+  const month = targetMonth != null ? targetMonth - 1 : today.getMonth(); // 0-indexed
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0);
 
