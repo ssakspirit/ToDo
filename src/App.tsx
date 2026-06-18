@@ -35,8 +35,8 @@ import {
   CalendarList,
 } from './services/calendarService';
 import TaskCard from './components/TaskCard';
-import { getAllScheduleTasks } from './services/todoService';
-import { getWorkdayCountdown, WorkdayCountdown } from './services/workdayService';
+import StatusSection from './components/StatusSection';
+import { getWorkdayCountdown, getMonthlyWorkdayStats, WorkdayCountdown, MonthlyWorkdayStats } from './services/workdayService';
 
 interface Attachment {
   id: string;
@@ -74,14 +74,19 @@ const App: React.FC = () => {
   
   const [isSending, setIsSending] = useState(false);
   const [workdayCountdown, setWorkdayCountdown] = useState<WorkdayCountdown | null>(null);
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyWorkdayStats | null>(null);
 
   const loadWorkdayCountdown = async () => {
     try {
       const tasks = await getAllScheduleTasks('학사일정복무');
-      const countdown = await getWorkdayCountdown(tasks);
+      const [countdown, stats] = await Promise.all([
+        getWorkdayCountdown(tasks),
+        getMonthlyWorkdayStats(tasks),
+      ]);
       setWorkdayCountdown(countdown);
+      setMonthlyStats(stats);
     } catch (e) {
-      console.error('출근일 계산 실패:', e);
+      console.error('근무 현황 계산 실패:', e);
     }
   };
 
@@ -587,20 +592,8 @@ const App: React.FC = () => {
                   To-Do
                 </h1>
                 {todayLabel && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {todayLabel}
-                    </span>
-                    {holidayName && (
-                      <span className="text-xs font-medium text-red-500 dark:text-red-400">
-                        · {holidayName}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {workdayCountdown && (
-                  <span className="text-xs text-indigo-500 dark:text-indigo-400 font-medium">
-                    {workdayCountdown.message}
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    {todayLabel}
                   </span>
                 )}
               </div>
@@ -782,6 +775,11 @@ const App: React.FC = () => {
               </div>
             )}
           </section>
+
+          {/* Status Section: 방학알림 + 정액분 */}
+          {authState.isMicrosoftAuthenticated && (workdayCountdown || monthlyStats) && (
+            <StatusSection countdown={workdayCountdown} monthlyStats={monthlyStats} />
+          )}
 
           {/* Results Section */}
           {tasks.length > 0 && (

@@ -43,6 +43,86 @@ function getDates(tasks: ScheduleTask[], title: string): Date[] {
     .map((t) => toDateOnly(t.dueDateTime!));
 }
 
+export interface MonthlyWorkdayStats {
+  currentWorkdays: number;   // 현재 근무일 (오늘까지 실제 정상근무)
+  availableWorkdays: number; // 근무 가능일 (남은 평일)
+  leaveUsed: number;         // 복무 사용일 (조퇴/지각/연가/병가 등)
+  status: '목표 달성' | '도전중' | '달성 실패';
+}
+
+export async function getMonthlyWorkdayStats(tasks: ScheduleTask[]): Promise<MonthlyWorkdayStats> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
+
+  const nationalHolidays = await getHolidayDatesInRange(monthStart, monthEnd);
+
+  const closureDates = new Set(
+    getDates(tasks, '휴업')
+      .filter((d) => d.getFullYear() === year && d.getMonth() === month)
+      .map(dateKey)
+  );
+
+  const LEAVE_TITLES = ['연가', '병가', '조퇴', '지각', '병조퇴', '병지각'];
+  const leaveDateSet = new Set<string>();
+  LEAVE_TITLES.forEach((title) => {
+    getDates(tasks, title)
+      .filter((d) => d.getFullYear() === year && d.getMonth() === month)
+      .forEach((d) => leaveDateSet.add(dateKey(d)));
+  });
+
+  const summerStart = getDate(tasks, '여름방학시작');
+  const summerEnd   = getDate(tasks, '여름방학종료');
+  const winterStart = getDate(tasks, '겨울방학시작');
+  const winterEnd   = getDate(tasks, '겨울방학종료');
+
+  const isVacation = (d: Date): boolean => {
+    if (summerStart && summerEnd && d >= summerStart && d <= summerEnd) return true;
+    if (winterStart && winterEnd && d >= winterStart && d <= winterEnd) return true;
+    return false;
+  };
+
+  const isScheduledDay = (d: Date): boolean =>
+    isWeekday(d) &&
+    !nationalHolidays.has(dateKey(d)) &&
+    !closureDates.has(dateKey(d)) &&
+    !isVacation(d);
+
+  // 오늘까지: 실제 정상근무일 + 복무사용일 계산
+  let currentWorkdays = 0;
+  let leaveUsed = 0;
+  let cur = new Date(monthStart);
+  while (cur <= today) {
+    if (isScheduledDay(cur)) {
+      if (leaveDateSet.has(dateKey(cur))) leaveUsed++;
+      else currentWorkdays++;
+    }
+    cur = addDays(cur, 1);
+  }
+
+  // 내일부터 월말까지: 근무 가능일
+  let availableWorkdays = 0;
+  cur = addDays(today, 1);
+  while (cur <= monthEnd) {
+    if (isScheduledDay(cur)) availableWorkdays++;
+    cur = addDays(cur, 1);
+  }
+
+  const TARGET = 15;
+  const status: MonthlyWorkdayStats['status'] =
+    currentWorkdays >= TARGET
+      ? '목표 달성'
+      : currentWorkdays + availableWorkdays >= TARGET
+      ? '도전중'
+      : '달성 실패';
+
+  return { currentWorkdays, availableWorkdays, leaveUsed, status };
+}
+
 export async function getWorkdayCountdown(tasks: ScheduleTask[]): Promise<WorkdayCountdown> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
