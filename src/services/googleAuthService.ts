@@ -20,6 +20,7 @@ interface StoredTokenInfo {
 
 const GOOGLE_AUTH_KEY = 'google_auth_token';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/userinfo.email',
@@ -67,6 +68,7 @@ const refreshAccessToken = async (refreshToken: string): Promise<StoredTokenInfo
     },
     body: new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),
@@ -190,6 +192,7 @@ const exchangeCodeForTokens = async (
       },
       body: new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
         code,
         code_verifier: codeVerifier,
         grant_type: 'authorization_code',
