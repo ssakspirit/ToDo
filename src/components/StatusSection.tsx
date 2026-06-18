@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Check, RefreshCw } from 'lucide-react';
-import { ScheduleTask, TodoTask, completeTask } from '../services/todoService';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Check, RefreshCw, Plus } from 'lucide-react';
+import { ScheduleTask, TodoTask, TodoList, completeTask } from '../services/todoService';
 import {
   MonthlyWorkdayStats,
   MonthOverview,
@@ -13,7 +13,9 @@ import {
 interface Props {
   scheduleTasks: ScheduleTask[];
   todoTasks: TodoTask[];
+  todoLists: TodoList[];
   onTaskComplete: (id: string) => void;
+  onTaskCreate: (listId: string, title: string, dueDate: string) => Promise<void>;
   onRefresh: () => Promise<void>;
 }
 
@@ -74,8 +76,8 @@ interface TaskListProps {
 }
 
 const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card }) => (
-  <div className={`${card} px-4 py-3`}>
-    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>
+  <div className={card ? `${card} px-4 py-3` : ''}>
+    {title && <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>}
     <ul className="space-y-2">
       {tasks.map((t) => {
         const completing = completingIds.has(t.id);
@@ -103,7 +105,7 @@ const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComp
   </div>
 );
 
-const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComplete, onRefresh }) => {
+const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, onTaskComplete, onTaskCreate, onRefresh }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -116,6 +118,24 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newListId, setNewListId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreate = useCallback(async (dueDate: string) => {
+    const title = newTitle.trim();
+    const listId = newListId || todoLists[0]?.id;
+    if (!title || !listId || creating) return;
+    setCreating(true);
+    try {
+      await onTaskCreate(listId, title, dueDate);
+      setNewTitle('');
+    } finally {
+      setCreating(false);
+      inputRef.current?.focus();
+    }
+  }, [newTitle, newListId, todoLists, creating, onTaskCreate]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -405,12 +425,53 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComple
         </div>
       )}
 
-      {/* 선택 날짜 작업 목록 */}
-      {selectedDate && tasksByDate.has(selectedDate) && (() => {
+      {/* 선택 날짜 작업 목록 + 추가 폼 */}
+      {selectedDate && (() => {
         const [sy, sm, sd] = selectedDate.split('-').map(Number);
         const selDate = new Date(sy, sm - 1, sd);
         const label = `${sm}월 ${sd}일 (${DAY_KR[selDate.getDay()]}) 기한 작업`;
-        return <TaskList title={label} tasks={tasksByDate.get(selectedDate)!} completingIds={completingIds} onComplete={handleComplete} card={card} />;
+        const tasks = tasksByDate.get(selectedDate) ?? [];
+        return (
+          <div className={`${card} px-4 py-3 space-y-3`}>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            {tasks.length > 0 && (
+              <TaskList title="" tasks={tasks} completingIds={completingIds} onComplete={handleComplete} card="" />
+            )}
+            {/* 작업 추가 폼 */}
+            {todoLists.length > 0 && (
+              <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <select
+                  value={newListId || todoLists[0]?.id}
+                  onChange={(e) => setNewListId(e.target.value)}
+                  className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  {todoLists.map((l) => (
+                    <option key={l.id} value={l.id}>{l.displayName}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1.5">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreate(selectedDate)}
+                    placeholder="새 작업 입력..."
+                    className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <button
+                    onClick={() => handleCreate(selectedDate)}
+                    disabled={!newTitle.trim() || creating}
+                    className="flex-shrink-0 flex items-center gap-0.5 px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 disabled:bg-slate-200 dark:disabled:bg-slate-700 text-white disabled:text-slate-400 rounded transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    추가
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
       })()}
 
       {/* 기한 없는 작업 */}

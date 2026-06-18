@@ -149,6 +149,22 @@ export const completeTask = async (listId: string, taskId: string): Promise<void
     .patch({ status: 'completed' });
 };
 
+// 기한이 있는 작업 생성
+export const createTaskWithDueDate = async (
+  listId: string,
+  title: string,
+  dueDate: string // YYYY-MM-DD
+): Promise<void> => {
+  const client = await getGraphClient();
+  await client.api(`/me/todo/lists/${listId}/tasks`).post({
+    title,
+    dueDateTime: {
+      dateTime: `${dueDate}T23:59:00.0000000`,
+      timeZone: 'Asia/Seoul',
+    },
+  });
+};
+
 // 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)
 export const getAllScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
   try {

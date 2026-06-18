@@ -25,6 +25,7 @@ import {
 import {
   getTodoLists,
   createTasksInBatch,
+  createTaskWithDueDate,
   getAllScheduleTasks,
   getAllTasksWithDueDates,
   TodoList,
@@ -785,7 +786,12 @@ const App: React.FC = () => {
             <StatusSection
               scheduleTasks={scheduleTasks}
               todoTasks={todoTasks}
+              todoLists={todoLists}
               onTaskComplete={(id) => setTodoTasks((prev) => prev.filter((t) => t.id !== id))}
+              onTaskCreate={async (listId, title, dueDate) => {
+                await createTaskWithDueDate(listId, title, dueDate);
+                await loadWorkdayCountdown();
+              }}
               onRefresh={loadWorkdayCountdown}
             />
           )}
