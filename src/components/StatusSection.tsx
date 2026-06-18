@@ -439,17 +439,17 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
             )}
             {/* 작업 추가 폼 */}
             {todoLists.length > 0 && (
-              <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
-                <select
-                  value={newListId || todoLists[0]?.id}
-                  onChange={(e) => setNewListId(e.target.value)}
-                  className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                >
-                  {todoLists.map((l) => (
-                    <option key={l.id} value={l.id}>{l.displayName}</option>
-                  ))}
-                </select>
+              <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex gap-1.5">
+                  <select
+                    value={newListId || todoLists[0]?.id}
+                    onChange={(e) => setNewListId(e.target.value)}
+                    className="flex-shrink-0 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-1 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400 max-w-[90px]"
+                  >
+                    {todoLists.map((l) => (
+                      <option key={l.id} value={l.id}>{l.displayName}</option>
+                    ))}
+                  </select>
                   <input
                     ref={inputRef}
                     type="text"
@@ -457,7 +457,7 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
                     onChange={(e) => setNewTitle(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleCreate(selectedDate)}
                     placeholder="새 작업 입력..."
-                    className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="flex-1 min-w-0 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
                   <button
                     onClick={() => handleCreate(selectedDate)}
