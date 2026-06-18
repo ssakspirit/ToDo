@@ -782,7 +782,11 @@ const App: React.FC = () => {
 
           {/* Status Section */}
           {authState.isMicrosoftAuthenticated && (
-            <StatusSection scheduleTasks={scheduleTasks} todoTasks={todoTasks} />
+            <StatusSection
+              scheduleTasks={scheduleTasks}
+              todoTasks={todoTasks}
+              onTaskComplete={(id) => setTodoTasks((prev) => prev.filter((t) => t.id !== id))}
+            />
           )}
 
           {/* Results Section */}

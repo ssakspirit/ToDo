@@ -88,6 +88,7 @@ export interface TodoTask {
   id: string;
   title: string;
   dueDate: string; // YYYY-MM-DD
+  listId: string;
   listName: string;
 }
 
@@ -124,6 +125,7 @@ export const getAllTasksWithDueDates = async (
               id: t.id,
               title: t.title,
               dueDate: parseDueDateUtc(t.dueDateTime.dateTime),
+              listId: list.id,
               listName: list.displayName,
             }));
         } catch {
@@ -136,6 +138,14 @@ export const getAllTasksWithDueDates = async (
     console.error('전체 작업 가져오기 실패:', error);
     return [];
   }
+};
+
+// 특정 작업을 완료 처리
+export const completeTask = async (listId: string, taskId: string): Promise<void> => {
+  const client = await getGraphClient();
+  await client
+    .api(`/me/todo/lists/${listId}/tasks/${taskId}`)
+    .patch({ status: 'completed' });
 };
 
 // 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)

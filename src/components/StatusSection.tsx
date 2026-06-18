@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { ScheduleTask, TodoTask } from '../services/todoService';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ScheduleTask, TodoTask, completeTask } from '../services/todoService';
 import {
   MonthlyWorkdayStats,
   MonthOverview,
@@ -13,6 +13,7 @@ import {
 interface Props {
   scheduleTasks: ScheduleTask[];
   todoTasks: TodoTask[];
+  onTaskComplete: (id: string) => void;
 }
 
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -63,7 +64,7 @@ function getEventLabelColor(info: DayInfo): string {
   }
 }
 
-const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks }) => {
+const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, onTaskComplete }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -74,6 +75,22 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks }) => {
   const [stats, setStats] = useState<MonthlyWorkdayStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
+
+  const handleComplete = useCallback(async (task: TodoTask) => {
+    if (completingIds.has(task.id)) return;
+    setCompletingIds((prev) => new Set(prev).add(task.id));
+    try {
+      await completeTask(task.listId, task.id);
+      setTimeout(() => {
+        onTaskComplete(task.id);
+        setCompletingIds((prev) => { const s = new Set(prev); s.delete(task.id); return s; });
+      }, 600);
+    } catch (e) {
+      console.error('완료 처리 실패:', e);
+      setCompletingIds((prev) => { const s = new Set(prev); s.delete(task.id); return s; });
+    }
+  }, [completingIds, onTaskComplete]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, TodoTask[]>();
@@ -331,17 +348,33 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks }) => {
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
               {label} 기한 작업
             </p>
-            <ul className="space-y-1.5">
-              {tasks.map((t) => (
-                <li key={t.id} className="flex items-start gap-2 text-xs">
-                  <span className="flex-shrink-0 text-slate-400 dark:text-slate-600 mt-px">
-                    {t.listName}
-                  </span>
-                  <span className="text-slate-700 dark:text-slate-300 leading-snug">
-                    {t.title}
-                  </span>
-                </li>
-              ))}
+            <ul className="space-y-2">
+              {tasks.map((t) => {
+                const completing = completingIds.has(t.id);
+                return (
+                  <li key={t.id} className={`flex items-start gap-2 text-xs transition-opacity duration-300 ${completing ? 'opacity-40' : 'opacity-100'}`}>
+                    <button
+                      onClick={() => handleComplete(t)}
+                      disabled={completing}
+                      className={`flex-shrink-0 mt-px w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
+                        ${completing
+                          ? 'border-emerald-500 bg-emerald-500'
+                          : 'border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500'
+                        }`}
+                    >
+                      {completing && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                    </button>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-slate-700 dark:text-slate-300 leading-snug">
+                        {t.title}
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-600 text-[10px]">
+                        {t.listName}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         );
