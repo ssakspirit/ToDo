@@ -182,11 +182,12 @@ export async function getMonthlyWorkdayStats(
     !closureDates.has(dateKey(d)) &&
     !isVacation(d);
 
-  // 오늘까지: 실제 정상근무일 + 복무사용일 계산
+  // monthStart ~ min(today, monthEnd): 실제 정상근무일 + 복무사용일
   let currentWorkdays = 0;
   let leaveUsed = 0;
+  const pastEnd = today < monthEnd ? today : monthEnd;
   let cur = new Date(monthStart);
-  while (cur <= today) {
+  while (cur <= pastEnd) {
     if (isScheduledDay(cur)) {
       if (leaveDateSet.has(dateKey(cur))) leaveUsed++;
       else currentWorkdays++;
@@ -194,12 +195,13 @@ export async function getMonthlyWorkdayStats(
     cur = addDays(cur, 1);
   }
 
-  // 내일부터 월말까지: 근무 가능일 + 미래 복무사용일 분리 계산
+  // max(today+1, monthStart) ~ monthEnd: 근무 가능일 + 미래 복무사용일
   let availableWorkdays = 0;
-  cur = addDays(today, 1);
+  const futureStart = addDays(today, 1) > monthStart ? addDays(today, 1) : monthStart;
+  cur = new Date(futureStart);
   while (cur <= monthEnd) {
     if (isScheduledDay(cur)) {
-      if (leaveDateSet.has(dateKey(cur))) leaveUsed++; // 미래 연가/병가 등도 합산
+      if (leaveDateSet.has(dateKey(cur))) leaveUsed++;
       else availableWorkdays++;
     }
     cur = addDays(cur, 1);
