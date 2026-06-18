@@ -26,8 +26,10 @@ import {
   getTodoLists,
   createTasksInBatch,
   getAllScheduleTasks,
+  getAllTasksWithDueDates,
   TodoList,
   ScheduleTask,
+  TodoTask,
 } from './services/todoService';
 import {
   createEventsInBatch,
@@ -70,11 +72,16 @@ const App: React.FC = () => {
   
   const [isSending, setIsSending] = useState(false);
   const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
+  const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
 
   const loadWorkdayCountdown = async () => {
     try {
-      const tasks = await getAllScheduleTasks('학사일정복무');
+      const [tasks, todos] = await Promise.all([
+        getAllScheduleTasks('학사일정복무'),
+        getAllTasksWithDueDates(['학사일정복무']),
+      ]);
       setScheduleTasks(tasks);
+      setTodoTasks(todos);
     } catch (e) {
       console.error('일정 로드 실패:', e);
     }
@@ -775,7 +782,7 @@ const App: React.FC = () => {
 
           {/* Status Section */}
           {authState.isMicrosoftAuthenticated && (
-            <StatusSection scheduleTasks={scheduleTasks} />
+            <StatusSection scheduleTasks={scheduleTasks} todoTasks={todoTasks} />
           )}
 
           {/* Results Section */}

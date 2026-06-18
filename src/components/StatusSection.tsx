@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { ScheduleTask } from '../services/todoService';
+import { ScheduleTask, TodoTask } from '../services/todoService';
 import {
   MonthlyWorkdayStats,
   MonthOverview,
@@ -12,6 +12,7 @@ import {
 
 interface Props {
   scheduleTasks: ScheduleTask[];
+  todoTasks: TodoTask[];
 }
 
 const DAY_HEADERS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -62,7 +63,7 @@ function getEventLabelColor(info: DayInfo): string {
   }
 }
 
-const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
+const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
 
@@ -72,6 +73,16 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
   const [overview, setOverview] = useState<MonthOverview | null>(null);
   const [stats, setStats] = useState<MonthlyWorkdayStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, TodoTask[]>();
+    todoTasks.forEach((t) => {
+      if (!map.has(t.dueDate)) map.set(t.dueDate, []);
+      map.get(t.dueDate)!.push(t);
+    });
+    return map;
+  }, [todoTasks]);
 
   const load = useCallback(
     async (year: number, month: number) => {
@@ -185,12 +196,19 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
               const isToday = k === todayKey;
               const textColor = getDayTextColor(info, col);
               const events = info?.events ?? [];
+              const taskCount = tasksByDate.get(k)?.length ?? 0;
+              const isSelected = k === selectedDate;
 
               return (
                 <div
                   key={idx}
-                  className="flex flex-col items-center py-2"
+                  className={`flex flex-col items-center py-2 rounded cursor-pointer transition-colors
+                    ${isSelected
+                      ? 'bg-slate-100 dark:bg-slate-800'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    }`}
                   title={events.join(' · ')}
+                  onClick={() => setSelectedDate(isSelected ? null : k)}
                 >
                   <span
                     className={`text-xs font-medium leading-tight flex items-center justify-center rounded-full
@@ -206,6 +224,11 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
                       className={`text-[9px] leading-tight text-center w-full px-px truncate ${getEventLabelColor(info)}`}
                     >
                       {events[0].length > 3 ? events[0].slice(0, 3) + '…' : events[0]}
+                    </span>
+                  )}
+                  {taskCount > 0 && (
+                    <span className="text-[9px] font-semibold text-blue-500 dark:text-blue-400 leading-tight">
+                      {taskCount}
                     </span>
                   )}
                 </div>
@@ -296,6 +319,33 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
           </div>
         </div>
       )}
+
+      {/* 선택 날짜 작업 목록 */}
+      {selectedDate && tasksByDate.has(selectedDate) && (() => {
+        const [sy, sm, sd] = selectedDate.split('-').map(Number);
+        const selDate = new Date(sy, sm - 1, sd);
+        const label = `${sm}월 ${sd}일 (${DAY_KR[selDate.getDay()]})`;
+        const tasks = tasksByDate.get(selectedDate)!;
+        return (
+          <div className={`${card} px-4 py-3`}>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+              {label} 기한 작업
+            </p>
+            <ul className="space-y-1.5">
+              {tasks.map((t) => (
+                <li key={t.id} className="flex items-start gap-2 text-xs">
+                  <span className="flex-shrink-0 text-slate-400 dark:text-slate-600 mt-px">
+                    {t.listName}
+                  </span>
+                  <span className="text-slate-700 dark:text-slate-300 leading-snug">
+                    {t.title}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
     </div>
   );
 };

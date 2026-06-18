@@ -84,6 +84,60 @@ export interface ScheduleTask {
   createdDateTime: string;
 }
 
+export interface TodoTask {
+  id: string;
+  title: string;
+  dueDate: string; // YYYY-MM-DD
+  listName: string;
+}
+
+function parseDueDateUtc(dtString: string): string {
+  const s =
+    dtString.includes('Z') || /[+-]\d{2}:\d{2}$/.test(dtString)
+      ? dtString
+      : dtString + 'Z';
+  const d = new Date(s);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 모든 리스트에서 기한이 있는 미완료 작업을 가져옴
+export const getAllTasksWithDueDates = async (
+  excludeListNames: string[] = []
+): Promise<TodoTask[]> => {
+  try {
+    const client = await getGraphClient();
+    const listsResponse = await client.api('/me/todo/lists').get();
+    const lists: TodoList[] = (listsResponse.value as TodoList[]).filter(
+      (l) => !excludeListNames.includes(l.displayName)
+    );
+
+    const results = await Promise.all(
+      lists.map(async (list) => {
+        try {
+          const res = await client
+            .api(`/me/todo/lists/${list.id}/tasks`)
+            .query({ $filter: "status ne 'completed'", $top: 200 })
+            .get();
+          return (res.value as any[])
+            .filter((t) => t.dueDateTime?.dateTime)
+            .map((t) => ({
+              id: t.id,
+              title: t.title,
+              dueDate: parseDueDateUtc(t.dueDateTime.dateTime),
+              listName: list.displayName,
+            }));
+        } catch {
+          return [];
+        }
+      })
+    );
+    return results.flat();
+  } catch (error) {
+    console.error('전체 작업 가져오기 실패:', error);
+    return [];
+  }
+};
+
 // 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)
 export const getAllScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
   try {
