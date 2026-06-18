@@ -7,7 +7,13 @@ export interface WorkdayCountdown {
 }
 
 function toDateOnly(dtString: string): Date {
-  const d = new Date(dtString);
+  // MS Graph returns dateTime in UTC without 'Z' suffix; add it so JS parses as UTC,
+  // then extract the local date (KST). Without this, Korean users see dates shifted -1 day.
+  const s =
+    dtString.includes('Z') || /[+-]\d{2}:\d{2}$/.test(dtString)
+      ? dtString
+      : dtString + 'Z';
+  const d = new Date(s);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
