@@ -253,35 +253,6 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
         </div>
       )}
 
-      {/* 출근일 현황 */}
-      {overview && (
-        <div className={`${card} px-4 py-2.5`}>
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <span className="font-medium text-slate-600 dark:text-slate-400 flex-shrink-0">
-              출근일 현황
-            </span>
-            <span className="text-slate-500 dark:text-slate-500">
-              출근일{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({overview.workdays})
-              </span>
-            </span>
-            <span className="text-slate-500 dark:text-slate-500">
-              휴일{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({overview.holidayCount})
-              </span>
-            </span>
-            <span className="text-slate-500 dark:text-slate-500">
-              방학{' '}
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                ({overview.vacationDays})
-              </span>
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* 정액분 */}
       {stats && (
         <div className={`${card} px-4 py-2.5 space-y-1`}>
