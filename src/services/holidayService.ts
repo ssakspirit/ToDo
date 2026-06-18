@@ -1,6 +1,7 @@
 const BASE_URL = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo';
 
-const holidayCache = new Map<string, Array<{ dateName: string; locdate: number; isHoliday: string }>>();
+type HolidayRow = { dateName: string; locdate: number; isHoliday: string };
+const holidayCache = new Map<string, Promise<HolidayRow[]>>();
 
 function parseXmlHolidays(xmlText: string): Array<{ dateName: string; locdate: number; isHoliday: string }> {
   const parser = new DOMParser();
@@ -22,9 +23,9 @@ function parseXmlHolidays(xmlText: string): Array<{ dateName: string; locdate: n
   return result;
 }
 
-async function fetchHolidays(year: number, month: number) {
+function fetchHolidays(year: number, month: number): Promise<HolidayRow[]> {
   const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) return Promise.resolve([]);
 
   const key = `${year}-${month}`;
   if (holidayCache.has(key)) return holidayCache.get(key)!;
@@ -32,16 +33,13 @@ async function fetchHolidays(year: number, month: number) {
   const monthStr = String(month).padStart(2, '0');
   const url = `${BASE_URL}?serviceKey=${apiKey}&solYear=${year}&solMonth=${monthStr}&numOfRows=50`;
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const xmlText = await res.text();
-    const result = parseXmlHolidays(xmlText);
-    holidayCache.set(key, result);
-    return result;
-  } catch {
-    return [];
-  }
+  const promise = fetch(url)
+    .then((res) => (res.ok ? res.text() : ''))
+    .then((xmlText) => (xmlText ? parseXmlHolidays(xmlText) : []))
+    .catch(() => [] as HolidayRow[]);
+
+  holidayCache.set(key, promise);
+  return promise;
 }
 
 export async function getTodayHolidayName(): Promise<string | null> {
