@@ -174,15 +174,10 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
           ))}
         </div>
 
-        {/* Day cells */}
-        {loading ? (
-          <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-600">
-            로딩중…
-          </div>
-        ) : (
-          <div className="grid grid-cols-7">
-            {cells.map((day, idx) => {
-              if (!day) return <div key={idx} className="py-0.5" />;
+        {/* Day cells — keep previous data visible while loading; just dim */}
+        <div className={`grid grid-cols-7 transition-opacity duration-200 ${loading ? 'opacity-40' : 'opacity-100'}`}>
+          {cells.map((day, idx) => {
+              if (!day) return <div key={idx} className="py-2" />;
 
               const col = idx % 7;
               const k = dateKey(viewYear, viewMonth, day);
@@ -194,7 +189,7 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
               return (
                 <div
                   key={idx}
-                  className="flex flex-col items-center py-0.5"
+                  className="flex flex-col items-center py-2"
                   title={events.join(' · ')}
                 >
                   <span
@@ -217,7 +212,6 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks }) => {
               );
             })}
           </div>
-        )}
 
         {/* Legend */}
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">

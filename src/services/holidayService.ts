@@ -1,5 +1,7 @@
 const BASE_URL = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo';
 
+const holidayCache = new Map<string, Array<{ dateName: string; locdate: number; isHoliday: string }>>();
+
 function parseXmlHolidays(xmlText: string): Array<{ dateName: string; locdate: number; isHoliday: string }> {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'application/xml');
@@ -24,6 +26,9 @@ async function fetchHolidays(year: number, month: number) {
   const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY;
   if (!apiKey) return [];
 
+  const key = `${year}-${month}`;
+  if (holidayCache.has(key)) return holidayCache.get(key)!;
+
   const monthStr = String(month).padStart(2, '0');
   const url = `${BASE_URL}?serviceKey=${apiKey}&solYear=${year}&solMonth=${monthStr}&numOfRows=50`;
 
@@ -31,7 +36,9 @@ async function fetchHolidays(year: number, month: number) {
     const res = await fetch(url);
     if (!res.ok) return [];
     const xmlText = await res.text();
-    return parseXmlHolidays(xmlText);
+    const result = parseXmlHolidays(xmlText);
+    holidayCache.set(key, result);
+    return result;
   } catch {
     return [];
   }
