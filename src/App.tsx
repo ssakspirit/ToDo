@@ -26,7 +26,9 @@ import {
 import {
   getTodoLists,
   createTasksInBatch,
+  getScheduleTasks,
   TodoList,
+  ScheduleTask,
 } from './services/todoService';
 import {
   createEventsInBatch,
@@ -34,6 +36,7 @@ import {
   CalendarList,
 } from './services/calendarService';
 import TaskCard from './components/TaskCard';
+import ScheduleList from './components/ScheduleList';
 
 interface Attachment {
   id: string;
@@ -71,6 +74,24 @@ const App: React.FC = () => {
   
   const [isSending, setIsSending] = useState(false);
 
+  // 학사일정복무 schedule
+  const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+
+  const loadScheduleTasks = async () => {
+    setScheduleLoading(true);
+    setScheduleError(null);
+    try {
+      const tasks = await getScheduleTasks('학사일정복무');
+      setScheduleTasks(tasks);
+    } catch {
+      setScheduleError('일정을 불러오지 못했습니다.');
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
   // Initialize today's date label and holiday
   useEffect(() => {
     const today = new Date();
@@ -98,6 +119,7 @@ const App: React.FC = () => {
           newAuthState.userName = msAccount.name || undefined;
           newAuthState.userEmail = msAccount.username || undefined;
           loadTodoLists();
+          loadScheduleTasks();
         }
       } catch (error) {
         console.error('Microsoft 인증 확인 실패:', error);
@@ -163,6 +185,7 @@ const App: React.FC = () => {
           userEmail: account.username || undefined,
         }));
         await loadTodoLists();
+        loadScheduleTasks();
       }
     } catch (error) {
       console.error('Microsoft 로그인 실패:', error);
@@ -761,6 +784,16 @@ const App: React.FC = () => {
               </div>
             )}
           </section>
+
+          {/* Schedule Section */}
+          {authState.isMicrosoftAuthenticated && (
+            <ScheduleList
+              tasks={scheduleTasks}
+              isLoading={scheduleLoading}
+              error={scheduleError}
+              onRefresh={loadScheduleTasks}
+            />
+          )}
 
           {/* Results Section */}
           {tasks.length > 0 && (

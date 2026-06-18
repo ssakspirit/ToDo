@@ -74,6 +74,45 @@ export const createTask = async (
   }
 };
 
+export interface ScheduleTask {
+  id: string;
+  title: string;
+  body?: string;
+  dueDateTime?: string;
+  status: 'notStarted' | 'inProgress' | 'completed' | string;
+  importance: string;
+  createdDateTime: string;
+}
+
+export const getScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
+  try {
+    const client = await getGraphClient();
+    const listsResponse = await client.api('/me/todo/lists').get();
+    const lists: TodoList[] = listsResponse.value;
+
+    const target = lists.find((l) => l.displayName === listName);
+    if (!target) return [];
+
+    const tasksResponse = await client
+      .api(`/me/todo/lists/${target.id}/tasks`)
+      .query({ $filter: "status ne 'completed'", $orderby: 'createdDateTime desc', $top: 50 })
+      .get();
+
+    return tasksResponse.value.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      body: t.body?.content,
+      dueDateTime: t.dueDateTime?.dateTime,
+      status: t.status,
+      importance: t.importance,
+      createdDateTime: t.createdDateTime,
+    }));
+  } catch (error) {
+    console.error('일정 가져오기 실패:', error);
+    throw error;
+  }
+};
+
 export const createTasksInBatch = async (
   listId: string,
   tasks: TaskDetails[]
