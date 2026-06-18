@@ -1,5 +1,5 @@
 import { ScheduleTask } from './todoService';
-import { getHolidayDatesInRange } from './holidayService';
+import { getHolidayDatesInRange, getHolidayInfoInRange } from './holidayService';
 
 export interface WorkdayCountdown {
   message: string;
@@ -121,6 +121,101 @@ export async function getMonthlyWorkdayStats(tasks: ScheduleTask[]): Promise<Mon
       : '달성 실패';
 
   return { currentWorkdays, availableWorkdays, leaveUsed, status };
+}
+
+export interface KeyEvent {
+  name: string;
+  date: Date;
+  type: 'holiday' | 'vacation' | 'closure';
+}
+
+export interface MonthOverview {
+  year: number;
+  month: number;
+  keyEvents: KeyEvent[];
+  workdays: number;    // 출근 해야 하는 날 (전체 월 기준)
+  holidayCount: number; // 공휴일 수 (평일 기준)
+  vacationDays: number; // 방학 일수 (평일 기준)
+}
+
+export async function getMonthOverview(tasks: ScheduleTask[]): Promise<MonthOverview> {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
+
+  const apiHolidays = await getHolidayInfoInRange(monthStart, monthEnd);
+  const holidayDateSet = new Set(apiHolidays.map((h) => h.date));
+
+  // 주요 일정: 공휴일
+  const keyEvents: KeyEvent[] = apiHolidays.map((h) => ({
+    name: h.name,
+    date: new Date(h.date + 'T00:00:00'),
+    type: 'holiday' as const,
+  }));
+
+  // 이번 달에 해당하는 방학 시작/종료 이벤트 추가
+  const VACATION_LABELS: Record<string, string> = {
+    '여름방학시작': '여름방학 시작',
+    '여름방학종료': '여름방학 종료',
+    '겨울방학시작': '겨울방학 시작',
+    '겨울방학종료': '겨울방학 종료',
+  };
+  Object.entries(VACATION_LABELS).forEach(([title, label]) => {
+    const d = getDate(tasks, title);
+    if (d && d.getFullYear() === year && d.getMonth() === month) {
+      keyEvents.push({ name: label, date: d, type: 'vacation' });
+    }
+  });
+
+  // 이번 달 휴업 이벤트 추가
+  getDates(tasks, '휴업').forEach((d) => {
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      keyEvents.push({ name: '휴업', date: d, type: 'closure' });
+    }
+  });
+
+  keyEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  // 방학 기간
+  const summerStart = getDate(tasks, '여름방학시작');
+  const summerEnd   = getDate(tasks, '여름방학종료');
+  const winterStart = getDate(tasks, '겨울방학시작');
+  const winterEnd   = getDate(tasks, '겨울방학종료');
+
+  const closureDateSet = new Set(
+    getDates(tasks, '휴업')
+      .filter((d) => d.getFullYear() === year && d.getMonth() === month)
+      .map(dateKey)
+  );
+
+  const isVacationDay = (d: Date): boolean => {
+    if (summerStart && summerEnd && d >= summerStart && d <= summerEnd) return true;
+    if (winterStart && winterEnd && d >= winterStart && d <= winterEnd) return true;
+    return false;
+  };
+
+  let workdays = 0;
+  let holidayCount = 0;
+  let vacationDays = 0;
+
+  let cur = new Date(monthStart);
+  while (cur <= monthEnd) {
+    if (isWeekday(cur)) {
+      const key = dateKey(cur);
+      if (holidayDateSet.has(key)) {
+        holidayCount++;
+      } else if (isVacationDay(cur)) {
+        vacationDays++;
+      } else if (!closureDateSet.has(key)) {
+        workdays++;
+      }
+    }
+    cur = addDays(cur, 1);
+  }
+
+  return { year, month: month + 1, keyEvents, workdays, holidayCount, vacationDays };
 }
 
 export async function getWorkdayCountdown(tasks: ScheduleTask[]): Promise<WorkdayCountdown> {

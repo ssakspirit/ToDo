@@ -49,6 +49,30 @@ export async function getTodayHolidayName(): Promise<string | null> {
   return match ? match.dateName : null;
 }
 
+export interface HolidayInfo {
+  name: string;
+  date: string; // YYYY-MM-DD
+}
+
+// 범위 내 공휴일 이름 + 날짜 목록 반환
+export async function getHolidayInfoInRange(start: Date, end: Date): Promise<HolidayInfo[]> {
+  const result: HolidayInfo[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (cur <= endMonth) {
+    const items = await fetchHolidays(cur.getFullYear(), cur.getMonth() + 1);
+    items.forEach((item) => {
+      if (item.isHoliday === 'Y') {
+        const s = String(item.locdate);
+        result.push({ name: item.dateName, date: `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` });
+      }
+    });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return result;
+}
+
 // YYYY-MM-DD 형식의 공휴일 날짜 집합을 반환
 export async function getHolidayDatesInRange(start: Date, end: Date): Promise<Set<string>> {
   const result = new Set<string>();
