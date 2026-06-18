@@ -26,9 +26,8 @@ import {
 import {
   getTodoLists,
   createTasksInBatch,
-  getScheduleTasks,
+  getAllScheduleTasks,
   TodoList,
-  ScheduleTask,
 } from './services/todoService';
 import {
   createEventsInBatch,
@@ -36,7 +35,8 @@ import {
   CalendarList,
 } from './services/calendarService';
 import TaskCard from './components/TaskCard';
-import ScheduleList from './components/ScheduleList';
+import { getAllScheduleTasks } from './services/todoService';
+import { getWorkdayCountdown, WorkdayCountdown } from './services/workdayService';
 
 interface Attachment {
   id: string;
@@ -73,22 +73,15 @@ const App: React.FC = () => {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
   
   const [isSending, setIsSending] = useState(false);
+  const [workdayCountdown, setWorkdayCountdown] = useState<WorkdayCountdown | null>(null);
 
-  // 학사일정복무 schedule
-  const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
-  const [scheduleLoading, setScheduleLoading] = useState(false);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-
-  const loadScheduleTasks = async () => {
-    setScheduleLoading(true);
-    setScheduleError(null);
+  const loadWorkdayCountdown = async () => {
     try {
-      const tasks = await getScheduleTasks('학사일정복무');
-      setScheduleTasks(tasks);
-    } catch {
-      setScheduleError('일정을 불러오지 못했습니다.');
-    } finally {
-      setScheduleLoading(false);
+      const tasks = await getAllScheduleTasks('학사일정복무');
+      const countdown = await getWorkdayCountdown(tasks);
+      setWorkdayCountdown(countdown);
+    } catch (e) {
+      console.error('출근일 계산 실패:', e);
     }
   };
 
@@ -119,7 +112,7 @@ const App: React.FC = () => {
           newAuthState.userName = msAccount.name || undefined;
           newAuthState.userEmail = msAccount.username || undefined;
           loadTodoLists();
-          loadScheduleTasks();
+          loadWorkdayCountdown();
         }
       } catch (error) {
         console.error('Microsoft 인증 확인 실패:', error);
@@ -605,6 +598,11 @@ const App: React.FC = () => {
                     )}
                   </div>
                 )}
+                {workdayCountdown && (
+                  <span className="text-xs text-indigo-500 dark:text-indigo-400 font-medium">
+                    {workdayCountdown.message}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -784,16 +782,6 @@ const App: React.FC = () => {
               </div>
             )}
           </section>
-
-          {/* Schedule Section */}
-          {authState.isMicrosoftAuthenticated && (
-            <ScheduleList
-              tasks={scheduleTasks}
-              isLoading={scheduleLoading}
-              error={scheduleError}
-              onRefresh={loadScheduleTasks}
-            />
-          )}
 
           {/* Results Section */}
           {tasks.length > 0 && (

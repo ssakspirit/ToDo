@@ -84,6 +84,36 @@ export interface ScheduleTask {
   createdDateTime: string;
 }
 
+// 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)
+export const getAllScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
+  try {
+    const client = await getGraphClient();
+    const listsResponse = await client.api('/me/todo/lists').get();
+    const lists: TodoList[] = listsResponse.value;
+
+    const target = lists.find((l) => l.displayName === listName);
+    if (!target) return [];
+
+    const tasksResponse = await client
+      .api(`/me/todo/lists/${target.id}/tasks`)
+      .query({ $top: 200 })
+      .get();
+
+    return tasksResponse.value.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      body: t.body?.content,
+      dueDateTime: t.dueDateTime?.dateTime,
+      status: t.status,
+      importance: t.importance,
+      createdDateTime: t.createdDateTime,
+    }));
+  } catch (error) {
+    console.error('전체 일정 가져오기 실패:', error);
+    throw error;
+  }
+};
+
 export const getScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
   try {
     const client = await getGraphClient();

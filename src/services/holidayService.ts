@@ -48,3 +48,28 @@ export async function getTodayHolidayName(): Promise<string | null> {
   const match = holidays.find((h) => h.isHoliday === 'Y' && h.locdate === todayNum);
   return match ? match.dateName : null;
 }
+
+// YYYY-MM-DD 형식의 공휴일 날짜 집합을 반환
+export async function getHolidayDatesInRange(start: Date, end: Date): Promise<Set<string>> {
+  const result = new Set<string>();
+
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (cur <= endMonth) {
+    const year = cur.getFullYear();
+    const month = cur.getMonth() + 1;
+    const items = await fetchHolidays(year, month);
+
+    items.forEach((item) => {
+      if (item.isHoliday === 'Y') {
+        const s = String(item.locdate);
+        result.add(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`);
+      }
+    });
+
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  return result;
+}
