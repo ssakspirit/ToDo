@@ -1,1 +1,1 @@
-🐛 $select+$filter 400 오류 수정 - To-Do API 호환성 문제로 $select 제거
+⚡ localStorage 캐시로 즉시 표시 - 캐시 먼저 렌더링 후 백그라운드에서 조용히 갱신

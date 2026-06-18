@@ -75,12 +75,25 @@ const App: React.FC = () => {
   const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
 
   const EXCLUDED_LISTS = ['영상제작', '교육과정수립운영', '학교자율시간', '기초학력업무', '부산여행', '보관'];
+  const CACHE_KEY = 'todo_tasks_cache';
 
   const loadWorkdayCountdown = async () => {
+    // 1. 캐시된 데이터 즉시 표시
     try {
-      const { scheduleTasks, todoTasks } = await loadAllTasks('학사일정복무', EXCLUDED_LISTS);
-      setScheduleTasks(scheduleTasks);
-      setTodoTasks(todoTasks);
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const cache = JSON.parse(raw) as { scheduleTasks: ScheduleTask[]; todoTasks: TodoTask[] };
+        setScheduleTasks(cache.scheduleTasks);
+        setTodoTasks(cache.todoTasks);
+      }
+    } catch {}
+
+    // 2. 백그라운드에서 최신 데이터 가져와 조용히 교체
+    try {
+      const result = await loadAllTasks('학사일정복무', EXCLUDED_LISTS);
+      setScheduleTasks(result.scheduleTasks);
+      setTodoTasks(result.todoTasks);
+      localStorage.setItem(CACHE_KEY, JSON.stringify(result));
     } catch (e) {
       console.error('일정 로드 실패:', e);
     }
