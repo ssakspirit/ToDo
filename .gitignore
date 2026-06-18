@@ -30,3 +30,6 @@ dist-ssr
 
 # Claude Code specific
 .commit_message.txt
+
+# Old duplicate directory (not a submodule)
+todo-ai-app/
