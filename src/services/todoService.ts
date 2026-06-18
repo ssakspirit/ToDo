@@ -165,6 +165,85 @@ export const createTaskWithDueDate = async (
   });
 };
 
+// 목록 한 번 조회 후 $batch로 모든 작업을 한 번에 가져옴
+export const loadAllTasks = async (
+  scheduleListName: string,
+  excludeListNames: string[]
+): Promise<{ scheduleTasks: ScheduleTask[]; todoTasks: TodoTask[] }> => {
+  const accessToken = await getAccessToken();
+  const client = await getGraphClient();
+
+  // 1. 목록 한 번만 조회
+  const listsResponse = await client.api('/me/todo/lists').get();
+  const allLists: TodoList[] = listsResponse.value;
+
+  const scheduleList = allLists.find((l) => l.displayName === scheduleListName) ?? null;
+  const filteredLists = allLists.filter(
+    (l) => l.displayName !== scheduleListName && !excludeListNames.includes(l.displayName)
+  );
+
+  // 2. $batch 요청 목록 구성
+  interface BatchReq { id: string; method: string; url: string; }
+  const requests: BatchReq[] = [];
+  const idToList = new Map<string, TodoList | null>(); // null = scheduleList
+
+  let idx = 0;
+  if (scheduleList) {
+    const id = String(idx++);
+    requests.push({ id, method: 'GET', url: `/me/todo/lists/${scheduleList.id}/tasks?$top=200` });
+    idToList.set(id, null);
+  }
+  filteredLists.forEach((list) => {
+    const id = String(idx++);
+    requests.push({
+      id,
+      method: 'GET',
+      url: `/me/todo/lists/${list.id}/tasks?$filter=status ne 'completed'&$top=200&$select=id,title,dueDateTime,status`,
+    });
+    idToList.set(id, list);
+  });
+
+  if (requests.length === 0) return { scheduleTasks: [], todoTasks: [] };
+
+  // 3. 20개씩 $batch 전송
+  const scheduleTasks: ScheduleTask[] = [];
+  const todoTasks: TodoTask[] = [];
+
+  for (let i = 0; i < requests.length; i += 20) {
+    const chunk = requests.slice(i, i + 20);
+    const res = await fetch('https://graph.microsoft.com/v1.0/$batch', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: chunk }),
+    });
+    if (!res.ok) continue;
+
+    const data = await res.json();
+    for (const resp of data.responses as any[]) {
+      if (resp.status !== 200) continue;
+      const items: any[] = resp.body?.value ?? [];
+      const list = idToList.get(resp.id);
+      if (list === undefined) continue;
+
+      if (list === null) {
+        items.forEach((t: any) => scheduleTasks.push({
+          id: t.id, title: t.title, body: t.body?.content,
+          dueDateTime: t.dueDateTime?.dateTime, status: t.status,
+          importance: t.importance, createdDateTime: t.createdDateTime,
+        }));
+      } else {
+        items.forEach((t: any) => todoTasks.push({
+          id: t.id, title: t.title,
+          dueDate: t.dueDateTime?.dateTime ? parseDueDateUtc(t.dueDateTime.dateTime) : null,
+          listId: list.id, listName: list.displayName,
+        }));
+      }
+    }
+  }
+
+  return { scheduleTasks, todoTasks };
+};
+
 // 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)
 export const getAllScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
   try {

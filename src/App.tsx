@@ -26,8 +26,7 @@ import {
   getTodoLists,
   createTasksInBatch,
   createTaskWithDueDate,
-  getAllScheduleTasks,
-  getAllTasksWithDueDates,
+  loadAllTasks,
   TodoList,
   ScheduleTask,
   TodoTask,
@@ -75,14 +74,13 @@ const App: React.FC = () => {
   const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
   const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
 
+  const EXCLUDED_LISTS = ['영상제작', '교육과정수립운영', '학교자율시간', '기초학력업무', '부산여행', '보관'];
+
   const loadWorkdayCountdown = async () => {
     try {
-      const [tasks, todos] = await Promise.all([
-        getAllScheduleTasks('학사일정복무'),
-        getAllTasksWithDueDates(['학사일정복무', '영상제작', '교육과정수립운영', '학교자율시간', '기초학력업무', '부산여행', '보관']),
-      ]);
-      setScheduleTasks(tasks);
-      setTodoTasks(todos);
+      const { scheduleTasks, todoTasks } = await loadAllTasks('학사일정복무', EXCLUDED_LISTS);
+      setScheduleTasks(scheduleTasks);
+      setTodoTasks(todoTasks);
     } catch (e) {
       console.error('일정 로드 실패:', e);
     }
@@ -193,7 +191,7 @@ const App: React.FC = () => {
           userEmail: account.username || undefined,
         }));
         await loadTodoLists();
-        loadScheduleTasks();
+        loadWorkdayCountdown();
       }
     } catch (error) {
       console.error('Microsoft 로그인 실패:', error);
