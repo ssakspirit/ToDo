@@ -792,21 +792,6 @@ const App: React.FC = () => {
             )}
           </section>
 
-          {/* Status Section */}
-          {authState.isMicrosoftAuthenticated && (
-            <StatusSection
-              scheduleTasks={scheduleTasks}
-              todoTasks={todoTasks}
-              todoLists={todoLists}
-              onTaskComplete={(id) => setTodoTasks((prev) => prev.filter((t) => t.id !== id))}
-              onTaskCreate={async (listId, title, dueDate) => {
-                await createTaskWithDueDate(listId, title, dueDate);
-                await loadWorkdayCountdown();
-              }}
-              onRefresh={loadWorkdayCountdown}
-            />
-          )}
-
           {/* Results Section */}
           {tasks.length > 0 && (
             <section className="space-y-3 pb-6">
@@ -889,6 +874,21 @@ const App: React.FC = () => {
                 ))}
               </div>
             </section>
+          )}
+
+          {/* Status Section */}
+          {authState.isMicrosoftAuthenticated && (
+            <StatusSection
+              scheduleTasks={scheduleTasks}
+              todoTasks={todoTasks}
+              todoLists={todoLists}
+              onTaskComplete={(id) => setTodoTasks((prev) => prev.filter((t) => t.id !== id))}
+              onTaskCreate={async (listId, title, dueDate) => {
+                await createTaskWithDueDate(listId, title, dueDate);
+                await loadWorkdayCountdown();
+              }}
+              onRefresh={loadWorkdayCountdown}
+            />
           )}
         </main>
       </div>
