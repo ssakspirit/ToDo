@@ -95,7 +95,17 @@ const App: React.FC = () => {
       setTodoTasks(result.todoTasks);
       localStorage.setItem(CACHE_KEY, JSON.stringify(result));
     } catch (e) {
-      console.error('일정 로드 실패:', e);
+      if (e instanceof Error && e.message === 'INTERACTION_REQUIRED') {
+        // 토큰 만료 - 팝업 없이 로그인 상태 초기화 (UI에서 로그인 버튼 표시)
+        setAuthState(prev => ({
+          ...prev,
+          isMicrosoftAuthenticated: false,
+          isAuthenticated: prev.isGoogleAuthenticated,
+          userName: undefined,
+        }));
+      } else {
+        console.error('일정 로드 실패:', e);
+      }
     }
   };
 
@@ -565,6 +575,17 @@ const App: React.FC = () => {
           ) {
             googleSuccess = successCount;
             googleTotal = totalCount;
+          }
+        } else if (result.status === 'rejected') {
+          const isMsIndex = index === 0 && authState.isMicrosoftAuthenticated;
+          if (isMsIndex && result.reason instanceof Error && result.reason.message === 'INTERACTION_REQUIRED') {
+            setAuthState(prev => ({
+              ...prev,
+              isMicrosoftAuthenticated: false,
+              isAuthenticated: prev.isGoogleAuthenticated,
+              userName: undefined,
+            }));
+            setErrorMsg('Microsoft 로그인이 만료되었습니다. 다시 로그인해주세요.');
           }
         }
       });

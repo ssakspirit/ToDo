@@ -93,8 +93,7 @@ export const getAccessToken = async (): Promise<string> => {
     return response.accessToken;
   } catch (error) {
     if (error instanceof InteractionRequiredAuthError) {
-      const response = await msal.acquireTokenPopup(request);
-      return response.accessToken;
+      throw new Error('INTERACTION_REQUIRED');
     }
     throw error;
   }
