@@ -377,12 +377,17 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
             </>
           )}
           {countdown && (() => {
-            const { message, daysLeft } = countdown;
+            const { message, daysLeft, inVacation } = countdown;
             const emoji = message.includes('🏖️') ? '🏖️' : message.includes('❄️') ? '❄️' : '';
             let text: string | null = null;
-            if (message.includes('중입니다')) text = `방학 중 ${emoji}`;
-            else if (message.includes('시작입니다')) text = `방학 D-Day ${emoji}`;
-            else if (daysLeft !== null) text = `방학까지 ${daysLeft}일 ${emoji}`;
+            if (inVacation) {
+              if (daysLeft === 1) text = `방학 중 ${emoji} (내일 개학)`;
+              else if (daysLeft !== null) text = `방학 중 ${emoji} (개학까지 ${daysLeft}일)`;
+              else text = `방학 중 ${emoji}`;
+            } else {
+              if (message.includes('시작입니다')) text = `방학 D-Day ${emoji}`;
+              else if (daysLeft !== null) text = `방학까지 ${daysLeft}일 ${emoji}`;
+            }
             if (!text) return null;
             return (
               <>

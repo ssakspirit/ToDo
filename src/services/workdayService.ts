@@ -4,6 +4,7 @@ import { getHolidayDatesInRange, getHolidayInfoInRange } from './holidayService'
 export interface WorkdayCountdown {
   message: string;
   daysLeft: number | null;
+  inVacation: boolean; // true일 때 daysLeft = 개학까지 남은 달력 일수
 }
 
 function toDateOnly(dtString: string): Date {
@@ -342,28 +343,32 @@ export async function getWorkdayCountdown(tasks: ScheduleTask[]): Promise<Workda
     vacationName = '여름방학';
     vacationEmoji = '🏖️';
   } else if (summerStart && summerEnd && today >= summerStart && today <= summerEnd) {
-    // 여름방학 중
-    return { message: '여름방학 중입니다! 🏖️', daysLeft: null };
+    // 여름방학 중 → 개학까지 달력 일수
+    const resumeDate = addDays(summerEnd, 1);
+    const daysLeft = Math.round((resumeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return { message: '여름방학 중 🏖️', daysLeft, inVacation: true };
   } else if (summerEnd && winterStart && today > summerEnd && today < winterStart) {
     // 여름방학 종료 후, 겨울방학 이전 → 겨울방학까지 카운트
     nextVacationStart = winterStart;
     vacationName = '겨울방학';
     vacationEmoji = '❄️';
   } else if (winterStart && winterEnd && today >= winterStart && today <= winterEnd) {
-    // 겨울방학 중
-    return { message: '겨울방학 중입니다! ❄️', daysLeft: null };
+    // 겨울방학 중 → 개학까지 달력 일수
+    const resumeDate = addDays(winterEnd, 1);
+    const daysLeft = Math.round((resumeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return { message: '겨울방학 중 ❄️', daysLeft, inVacation: true };
   } else if (winterEnd && today > winterEnd) {
     // 겨울방학 종료 후 (새 학년) → 다음 여름방학 날짜를 모름
-    return { message: '다음 방학 일정을 불러올 수 없습니다', daysLeft: null };
+    return { message: '다음 방학 일정을 불러올 수 없습니다', daysLeft: null, inVacation: false };
   } else {
-    return { message: '방학 일정을 찾을 수 없습니다', daysLeft: null };
+    return { message: '방학 일정을 찾을 수 없습니다', daysLeft: null, inVacation: false };
   }
 
   // 방학 전날까지 남은 출근일 계산
   const lastSchoolDay = addDays(nextVacationStart, -1);
 
   if (today > lastSchoolDay) {
-    return { message: `${vacationName} 시작입니다! ${vacationEmoji}`, daysLeft: 0 };
+    return { message: `${vacationName} 시작입니다! ${vacationEmoji}`, daysLeft: 0, inVacation: false };
   }
 
   // 해당 기간의 공휴일 가져오기
@@ -386,5 +391,6 @@ export async function getWorkdayCountdown(tasks: ScheduleTask[]): Promise<Workda
   return {
     message: `${vacationName}까지 ${count}일만 더 출근하자! ${vacationEmoji}`,
     daysLeft: count,
+    inVacation: false,
   };
 }
