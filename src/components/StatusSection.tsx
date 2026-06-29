@@ -5,9 +5,11 @@ import {
   MonthlyWorkdayStats,
   MonthOverview,
   DayInfo,
+  WorkdayCountdown,
   getMonthlyWorkdayStats,
   getMonthOverview,
   getMonthCalendarData,
+  getWorkdayCountdown,
 } from '../services/workdayService';
 
 interface Props {
@@ -116,6 +118,7 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
   const [stats, setStats] = useState<MonthlyWorkdayStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<WorkdayCountdown | null>(null);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -201,6 +204,11 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
   useEffect(() => {
     if (scheduleTasks.length > 0) load(viewYear, viewMonth);
   }, [load, viewYear, viewMonth, scheduleTasks]);
+
+  useEffect(() => {
+    if (scheduleTasks.length === 0) return;
+    getWorkdayCountdown(scheduleTasks).then(setCountdown).catch(console.error);
+  }, [scheduleTasks]);
 
   if (scheduleTasks.length === 0) return null;
 
@@ -368,6 +376,21 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
               })}
             </>
           )}
+          {countdown && (() => {
+            const { message, daysLeft } = countdown;
+            const emoji = message.includes('🏖️') ? '🏖️' : message.includes('❄️') ? '❄️' : '';
+            let text: string | null = null;
+            if (message.includes('중입니다')) text = `방학 중 ${emoji}`;
+            else if (message.includes('시작입니다')) text = `방학 D-Day ${emoji}`;
+            else if (daysLeft !== null) text = `방학까지 ${daysLeft}일 ${emoji}`;
+            if (!text) return null;
+            return (
+              <>
+                <span className="text-[10px] text-slate-200 dark:text-slate-700 select-none">|</span>
+                <span className="text-[10px] text-indigo-400 flex-shrink-0">{text}</span>
+              </>
+            );
+          })()}
         </div>
       </div>
 
