@@ -209,16 +209,25 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
       if (!map.has(t.dueDate)) map.set(t.dueDate, []);
       map.get(t.dueDate)!.push(t);
     });
+    map.forEach((tasks) =>
+      tasks.sort((a, b) => a.listName.localeCompare(b.listName) || a.title.localeCompare(b.title))
+    );
     return map;
   }, [todoTasks]);
 
   const overdueTasks = useMemo(
-    () => todoTasks.filter((t) => t.dueDate !== null && t.dueDate < todayKey),
+    () =>
+      todoTasks
+        .filter((t) => t.dueDate !== null && t.dueDate < todayKey)
+        .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? '')),
     [todoTasks, todayKey]
   );
 
   const noDateTasks = useMemo(
-    () => todoTasks.filter((t) => !t.dueDate),
+    () =>
+      todoTasks
+        .filter((t) => !t.dueDate)
+        .sort((a, b) => a.listName.localeCompare(b.listName) || a.title.localeCompare(b.title)),
     [todoTasks]
   );
 
