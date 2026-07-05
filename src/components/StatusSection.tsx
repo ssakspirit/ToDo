@@ -89,14 +89,15 @@ interface TaskListProps {
   completingIds: Set<string>;
   onComplete: (t: TodoTask) => void;
   card: string;
+  titleClassName?: string;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card }) => {
+const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card, titleClassName }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
     <div className={card ? `${card} px-4 py-3` : ''}>
-      {title && <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>}
+      {title && <p className={`text-xs font-medium mb-2 ${titleClassName ?? 'text-slate-500 dark:text-slate-400'}`}>{title}</p>}
       <ul className="space-y-2">
         {tasks.map((t) => {
           const completing = completingIds.has(t.id);
@@ -145,6 +146,7 @@ const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComp
 const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, onTaskComplete, onTaskCreate, onRefresh }) => {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+  const todayKey = dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth() + 1); // 1-12
@@ -210,6 +212,11 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
     return map;
   }, [todoTasks]);
 
+  const overdueTasks = useMemo(
+    () => todoTasks.filter((t) => t.dueDate !== null && t.dueDate < todayKey),
+    [todoTasks, todayKey]
+  );
+
   const noDateTasks = useMemo(
     () => todoTasks.filter((t) => !t.dueDate),
     [todoTasks]
@@ -258,7 +265,6 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
 
   const isCurrentMonth =
     viewYear === now.getFullYear() && viewMonth === now.getMonth() + 1;
-  const todayKey = dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
   // Build 7-column calendar grid
   const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay(); // 0=Sun
@@ -502,6 +508,11 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
           </div>
         );
       })()}
+
+      {/* 기한 지난 작업 */}
+      {overdueTasks.length > 0 && (
+        <TaskList title="기한 지난 작업" tasks={overdueTasks} completingIds={completingIds} onComplete={handleComplete} card={card} titleClassName="text-red-500 dark:text-red-400" />
+      )}
 
       {/* 기한 없는 작업 */}
       {noDateTasks.length > 0 && (
