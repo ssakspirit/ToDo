@@ -87,6 +87,7 @@ export interface ScheduleTask {
 export interface TodoTask {
   id: string;
   title: string;
+  body?: string;
   dueDate: string | null; // YYYY-MM-DD, or null if no due date
   listId: string;
   listName: string;
@@ -207,6 +208,7 @@ export const loadAllTasks = async (
   const todoTasks: TodoTask[] = todoResults.flatMap(({ list, items }) =>
     items.map((t) => ({
       id: t.id, title: t.title,
+      body: t.body?.content || undefined,
       dueDate: t.dueDateTime?.dateTime ? parseDueDateUtc(t.dueDateTime.dateTime) : null,
       listId: list.id, listName: list.displayName,
     }))

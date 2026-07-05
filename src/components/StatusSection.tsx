@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Check, RefreshCw, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Check, RefreshCw, Plus } from 'lucide-react';
 import { ScheduleTask, TodoTask, TodoList, completeTask } from '../services/todoService';
 import {
   MonthlyWorkdayStats,
@@ -40,6 +40,20 @@ const typeColorMap: Record<KeyEvent['type'], string> = {
 
 type KeyEvent = { name: string; date: Date; type: 'holiday' | 'vacation' | 'closure' };
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function dateKey(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
@@ -77,35 +91,56 @@ interface TaskListProps {
   card: string;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card }) => (
-  <div className={card ? `${card} px-4 py-3` : ''}>
-    {title && <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>}
-    <ul className="space-y-2">
-      {tasks.map((t) => {
-        const completing = completingIds.has(t.id);
-        return (
-          <li key={t.id} className={`flex items-start gap-2 text-xs transition-opacity duration-300 ${completing ? 'opacity-40' : 'opacity-100'}`}>
-            <button
-              onClick={() => onComplete(t)}
-              disabled={completing}
-              className={`flex-shrink-0 mt-px w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
-                ${completing
-                  ? 'border-emerald-500 bg-emerald-500'
-                  : 'border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500'
-                }`}
-            >
-              {completing && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-            </button>
-            <div className="flex flex-col min-w-0">
-              <span className="text-slate-700 dark:text-slate-300 leading-snug">{t.title}</span>
-              <span className="text-slate-400 dark:text-slate-600 text-[10px]">{t.listName}</span>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  </div>
-);
+const TaskList: React.FC<TaskListProps> = ({ title, tasks, completingIds, onComplete, card }) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <div className={card ? `${card} px-4 py-3` : ''}>
+      {title && <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{title}</p>}
+      <ul className="space-y-2">
+        {tasks.map((t) => {
+          const completing = completingIds.has(t.id);
+          const isExpanded = expandedId === t.id;
+          const bodyText = t.body ? stripHtml(t.body) : '';
+          const hasBody = bodyText.length > 0;
+
+          return (
+            <li key={t.id} className={`flex items-start gap-2 text-xs transition-opacity duration-300 ${completing ? 'opacity-40' : 'opacity-100'}`}>
+              <button
+                onClick={() => onComplete(t)}
+                disabled={completing}
+                className={`flex-shrink-0 mt-px w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all
+                  ${completing
+                    ? 'border-emerald-500 bg-emerald-500'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-emerald-400 dark:hover:border-emerald-500'
+                  }`}
+              >
+                {completing && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+              </button>
+              <div className="flex flex-col min-w-0 flex-1">
+                <div
+                  className={`flex items-center gap-1 ${hasBody ? 'cursor-pointer select-none' : ''}`}
+                  onClick={() => hasBody && setExpandedId(isExpanded ? null : t.id)}
+                >
+                  <span className="text-slate-700 dark:text-slate-300 leading-snug flex-1">{t.title}</span>
+                  {hasBody && (
+                    <ChevronDown className={`w-3 h-3 flex-shrink-0 text-slate-400 dark:text-slate-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                  )}
+                </div>
+                <span className="text-slate-400 dark:text-slate-600 text-[10px]">{t.listName}</span>
+                {isExpanded && (
+                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-wrap break-words border-l-2 border-slate-200 dark:border-slate-700 pl-2">
+                    {bodyText}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
 
 const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, onTaskComplete, onTaskCreate, onRefresh }) => {
   const now = new Date();
