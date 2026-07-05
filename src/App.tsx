@@ -21,6 +21,7 @@ import {
   loginGoogle,
   loginGoogleSilently,
   logoutGoogle,
+  handleGoogleOAuthCallback,
 } from './services/googleAuthService';
 import {
   getTodoLists,
@@ -155,13 +156,22 @@ const App: React.FC = () => {
       }
 
       try {
-        // Try Google silent login
-        const googleAccount = await loginGoogleSilently();
-        if (googleAccount) {
+        // 리디렉트 방식 OAuth 콜백 처리 (모바일에서 구글 로그인 후 돌아온 경우)
+        const callbackAccount = await handleGoogleOAuthCallback();
+        if (callbackAccount) {
           newAuthState.isGoogleAuthenticated = true;
-          newAuthState.googleUserName = googleAccount.name;
-          newAuthState.googleUserEmail = googleAccount.email;
+          newAuthState.googleUserName = callbackAccount.name;
+          newAuthState.googleUserEmail = callbackAccount.email;
           loadCalendarLists();
+        } else {
+          // 일반 silent login
+          const googleAccount = await loginGoogleSilently();
+          if (googleAccount) {
+            newAuthState.isGoogleAuthenticated = true;
+            newAuthState.googleUserName = googleAccount.name;
+            newAuthState.googleUserEmail = googleAccount.email;
+            loadCalendarLists();
+          }
         }
       } catch (error) {
         console.error('Google 인증 확인 실패:', error);

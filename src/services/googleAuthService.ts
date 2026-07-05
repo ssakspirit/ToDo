@@ -33,10 +33,14 @@ const isPopupClosed = (popup: Window | null): boolean => {
   try {
     return popup.closed;
   } catch (e) {
-    // If we can't access popup.closed due to COOP, assume it's still open
     return false;
   }
 };
+
+// 모바일/iOS PWA 환경 감지 → 리디렉트 방식 사용
+const shouldUseRedirect = (): boolean =>
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+  !!(window.navigator as any).standalone;
 
 // PKCE utility functions
 const generateCodeVerifier = (): string => {
@@ -95,56 +99,61 @@ const refreshAccessToken = async (refreshToken: string): Promise<StoredTokenInfo
   return tokenInfo;
 };
 
-// Google OAuth 2.0 popup login with PKCE
-export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
+// OAuth URL 빌더 (팝업/리디렉트 공통)
+const buildAuthUrl = async (): Promise<{ url: string; codeVerifier: string }> => {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.append('client_id', GOOGLE_CLIENT_ID);
+  authUrl.searchParams.append('redirect_uri', window.location.origin);
+  authUrl.searchParams.append('response_type', 'code');
+  authUrl.searchParams.append('scope', SCOPES.join(' '));
+  authUrl.searchParams.append('access_type', 'offline');
+  authUrl.searchParams.append('prompt', 'consent');
+  authUrl.searchParams.append('code_challenge', codeChallenge);
+  authUrl.searchParams.append('code_challenge_method', 'S256');
+
+  return { url: authUrl.toString(), codeVerifier };
+};
+
+// 리디렉트 방식 로그인 (모바일/iOS PWA용)
+// localStorage 사용 — iOS PWA는 리디렉트 시 sessionStorage가 초기화됨
+const loginGoogleRedirect = async (): Promise<null> => {
+  const { url, codeVerifier } = await buildAuthUrl();
+  localStorage.setItem('google_pkce_verifier', codeVerifier);
+  localStorage.setItem('google_oauth_pending', 'true');
+  window.location.href = url;
+  return null; // 페이지 이탈, 리턴값 없음
+};
+
+// 팝업 방식 로그인 (데스크톱용)
+const loginGooglePopup = async (): Promise<GoogleAccountInfo | null> => {
   return new Promise(async (resolve, reject) => {
-    // Generate PKCE parameters
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-
-    // Store code verifier for later use
+    const { url, codeVerifier } = await buildAuthUrl();
     sessionStorage.setItem('google_code_verifier', codeVerifier);
-
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.append('client_id', GOOGLE_CLIENT_ID);
-    authUrl.searchParams.append('redirect_uri', window.location.origin);
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('scope', SCOPES.join(' '));
-    authUrl.searchParams.append('access_type', 'offline'); // Request refresh token
-    authUrl.searchParams.append('prompt', 'consent'); // Force consent to always get refresh token
-    authUrl.searchParams.append('code_challenge', codeChallenge);
-    authUrl.searchParams.append('code_challenge_method', 'S256');
 
     const width = 500;
     const height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
 
-    const popup = window.open(
-      authUrl.toString(),
-      'Google Login',
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
+    const popup = window.open(url, 'Google Login', `width=${width},height=${height},left=${left},top=${top}`);
 
     if (!popup) {
       reject(new Error('팝업이 차단되었습니다.'));
       return;
     }
 
-    // Set timeout to prevent infinite waiting
     const timeoutId = setTimeout(() => {
       clearInterval(checkPopup);
-      if (popup && !isPopupClosed(popup)) {
-        popup.close();
-      }
+      if (!isPopupClosed(popup)) popup.close();
       sessionStorage.removeItem('google_code_verifier');
       reject(new Error('로그인 시간이 초과되었습니다.'));
-    }, 120000); // 2 minutes timeout
+    }, 120000);
 
-    // Listen for OAuth redirect
     const checkPopup = setInterval(() => {
       try {
-        // Try to check if popup is closed (may fail due to COOP)
         if (isPopupClosed(popup)) {
           clearInterval(checkPopup);
           clearTimeout(timeoutId);
@@ -152,31 +161,49 @@ export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
           reject(new Error('로그인이 취소되었습니다.'));
           return;
         }
-
-        // Check if popup redirected back to our domain
         if (popup.location.origin === window.location.origin) {
-          const searchParams = new URLSearchParams(popup.location.search);
-          const code = searchParams.get('code');
+          const code = new URLSearchParams(popup.location.search).get('code');
           clearInterval(checkPopup);
           clearTimeout(timeoutId);
           popup.close();
-
           if (code) {
-            // Exchange authorization code for tokens
-            exchangeCodeForTokens(code, codeVerifier)
-              .then(resolve)
-              .catch(reject);
+            exchangeCodeForTokens(code, codeVerifier).then(resolve).catch(reject);
           } else {
             sessionStorage.removeItem('google_code_verifier');
             reject(new Error('인증 코드를 받지 못했습니다.'));
           }
         }
       } catch (e) {
-        // Cross-origin error, popup not on our domain yet
-        // This is expected and can be safely ignored
+        // cross-origin, 정상
       }
     }, 500);
   });
+};
+
+// 모바일이면 리디렉트, 데스크톱이면 팝업
+export const loginGoogle = async (): Promise<GoogleAccountInfo | null> => {
+  if (shouldUseRedirect()) return loginGoogleRedirect();
+  return loginGooglePopup();
+};
+
+// 리디렉트 후 돌아왔을 때 URL의 code를 처리 (App.tsx mount 시 호출)
+export const handleGoogleOAuthCallback = async (): Promise<GoogleAccountInfo | null> => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const isPending = localStorage.getItem('google_oauth_pending') === 'true';
+
+  if (!code || !isPending) return null;
+
+  // URL 정리 (code가 history에 남지 않도록)
+  window.history.replaceState({}, document.title, window.location.pathname);
+
+  const codeVerifier = localStorage.getItem('google_pkce_verifier');
+  localStorage.removeItem('google_oauth_pending');
+  localStorage.removeItem('google_pkce_verifier');
+
+  if (!codeVerifier) throw new Error('PKCE verifier 없음');
+
+  return exchangeCodeForTokens(code, codeVerifier);
 };
 
 // Exchange authorization code for access and refresh tokens
