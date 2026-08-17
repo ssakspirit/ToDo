@@ -102,46 +102,6 @@ function parseDueDateUtc(dtString: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// 모든 리스트에서 기한이 있는 미완료 작업을 가져옴
-export const getAllTasksWithDueDates = async (
-  excludeListNames: string[] = []
-): Promise<TodoTask[]> => {
-  try {
-    const client = await getGraphClient();
-    const listsResponse = await client.api('/me/todo/lists').get();
-    const lists: TodoList[] = (listsResponse.value as TodoList[]).filter(
-      (l) => !excludeListNames.includes(l.displayName)
-    );
-
-    const results = await Promise.all(
-      lists.map(async (list) => {
-        try {
-          const res = await client
-            .api(`/me/todo/lists/${list.id}/tasks`)
-            .query({ $filter: "status ne 'completed'", $top: 200 })
-            .get();
-          return (res.value as any[])
-            .map((t) => ({
-              id: t.id,
-              title: t.title,
-              dueDate: t.dueDateTime?.dateTime
-                ? parseDueDateUtc(t.dueDateTime.dateTime)
-                : null,
-              listId: list.id,
-              listName: list.displayName,
-            }));
-        } catch {
-          return [];
-        }
-      })
-    );
-    return results.flat();
-  } catch (error) {
-    console.error('전체 작업 가져오기 실패:', error);
-    return [];
-  }
-};
-
 // 특정 작업을 완료 처리
 export const completeTask = async (listId: string, taskId: string): Promise<void> => {
   const client = await getGraphClient();
@@ -166,6 +126,22 @@ export const createTaskWithDueDate = async (
   });
 };
 
+// @odata.nextLink를 따라가며 모든 페이지를 수집
+const fetchAllPages = async (
+  client: Client,
+  path: string,
+  query: Record<string, string | number>
+): Promise<any[]> => {
+  const items: any[] = [];
+  let res = await client.api(path).query(query).get();
+  items.push(...(res.value as any[]));
+  while (res['@odata.nextLink']) {
+    res = await client.api(res['@odata.nextLink']).get();
+    items.push(...(res.value as any[]));
+  }
+  return items;
+};
+
 // 목록 한 번 조회 후 작업 조회를 병렬로 처리
 export const loadAllTasks = async (
   scheduleListName: string,
@@ -182,24 +158,24 @@ export const loadAllTasks = async (
     (l) => l.displayName !== scheduleListName && !excludeListNames.includes(l.displayName)
   );
 
-  // 2. 일정 목록 + 할 일 목록 전체 병렬 조회
-  const [scheduleRes, todoResults] = await Promise.all([
+  // 2. 일정 목록 + 할 일 목록 전체 병렬 조회 (페이지네이션 포함)
+  const [scheduleItems, todoResults] = await Promise.all([
     scheduleList
-      ? client.api(`/me/todo/lists/${scheduleList.id}/tasks`).query({ $top: 200 }).get()
-      : Promise.resolve({ value: [] }),
+      ? fetchAllPages(client, `/me/todo/lists/${scheduleList.id}/tasks`, { $top: 200 })
+      : Promise.resolve([] as any[]),
     Promise.all(
       filteredLists.map((list) =>
-        client
-          .api(`/me/todo/lists/${list.id}/tasks`)
-          .query({ $filter: "status ne 'completed'", $top: 200 })
-          .get()
-          .then((res) => ({ list, items: res.value as any[] }))
+        fetchAllPages(client, `/me/todo/lists/${list.id}/tasks`, {
+          $filter: "status ne 'completed'",
+          $top: 200,
+        })
+          .then((items) => ({ list, items }))
           .catch(() => ({ list, items: [] as any[] }))
       )
     ),
   ]);
 
-  const scheduleTasks: ScheduleTask[] = (scheduleRes.value as any[]).map((t) => ({
+  const scheduleTasks: ScheduleTask[] = scheduleItems.map((t) => ({
     id: t.id, title: t.title, body: t.body?.content,
     dueDateTime: t.dueDateTime?.dateTime, status: t.status,
     importance: t.importance, createdDateTime: t.createdDateTime,
@@ -215,65 +191,6 @@ export const loadAllTasks = async (
   );
 
   return { scheduleTasks, todoTasks };
-};
-
-// 완료 여부 무관하게 모든 할 일을 가져옴 (방학/휴업 날짜 파악용)
-export const getAllScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
-  try {
-    const client = await getGraphClient();
-    const listsResponse = await client.api('/me/todo/lists').get();
-    const lists: TodoList[] = listsResponse.value;
-
-    const target = lists.find((l) => l.displayName === listName);
-    if (!target) return [];
-
-    const tasksResponse = await client
-      .api(`/me/todo/lists/${target.id}/tasks`)
-      .query({ $top: 200 })
-      .get();
-
-    return tasksResponse.value.map((t: any) => ({
-      id: t.id,
-      title: t.title,
-      body: t.body?.content,
-      dueDateTime: t.dueDateTime?.dateTime,
-      status: t.status,
-      importance: t.importance,
-      createdDateTime: t.createdDateTime,
-    }));
-  } catch (error) {
-    console.error('전체 일정 가져오기 실패:', error);
-    throw error;
-  }
-};
-
-export const getScheduleTasks = async (listName: string): Promise<ScheduleTask[]> => {
-  try {
-    const client = await getGraphClient();
-    const listsResponse = await client.api('/me/todo/lists').get();
-    const lists: TodoList[] = listsResponse.value;
-
-    const target = lists.find((l) => l.displayName === listName);
-    if (!target) return [];
-
-    const tasksResponse = await client
-      .api(`/me/todo/lists/${target.id}/tasks`)
-      .query({ $filter: "status ne 'completed'", $orderby: 'createdDateTime desc', $top: 50 })
-      .get();
-
-    return tasksResponse.value.map((t: any) => ({
-      id: t.id,
-      title: t.title,
-      body: t.body?.content,
-      dueDateTime: t.dueDateTime?.dateTime,
-      status: t.status,
-      importance: t.importance,
-      createdDateTime: t.createdDateTime,
-    }));
-  } catch (error) {
-    console.error('일정 가져오기 실패:', error);
-    throw error;
-  }
 };
 
 export const createTasksInBatch = async (

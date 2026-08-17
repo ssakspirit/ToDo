@@ -25,6 +25,17 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-msal': ['@azure/msal-browser', '@microsoft/microsoft-graph-client'],
+          'vendor-genai': ['@google/genai'],
+        },
+      },
+    },
+  },
   define: {
     'process.env': {}
   }

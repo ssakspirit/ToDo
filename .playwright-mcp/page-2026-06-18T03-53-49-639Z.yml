@@ -1,0 +1,29 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img [ref=e8]
+        - generic [ref=e11]:
+          - heading "To-Do" [level=1] [ref=e12]
+          - generic [ref=e14]: 2026년 6월 18일 (목)
+      - generic [ref=e15]:
+        - button "Microsoft 로그인" [ref=e16] [cursor=pointer]:
+          - img [ref=e17]
+        - button "Google 로그인" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+        - button "다크모드 전환" [ref=e24] [cursor=pointer]:
+          - img [ref=e25]
+  - main [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - img [ref=e36]
+          - textbox "여기에 입력" [ref=e38]
+        - generic [ref=e39]:
+          - img [ref=e41]
+          - generic [ref=e45]:
+            - button [ref=e47] [cursor=pointer]:
+              - img [ref=e48]
+            - button "Choose File" [ref=e51] [cursor=pointer]
+      - button "분석하기" [ref=e53] [cursor=pointer]:
+        - img [ref=e54]

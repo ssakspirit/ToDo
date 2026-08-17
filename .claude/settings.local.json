@@ -15,7 +15,8 @@
       "WebSearch",
       "Bash(cat:*)",
       "Bash(dir /b /s package.json)",
-      "Bash(git pull origin main --allow-unrelated-histories)"
+      "Bash(git pull origin main --allow-unrelated-histories)",
+      "PowerShell(cd \"c:\\\\Users\\\\ssaks\\\\OneDrive - main\\\\0nowcoding\\\\todo\" && git add src/components/StatusSection.tsx .commit_message.txt && git commit -m \"$\\(cat .commit_message.txt\\)\" && git push)"
     ]
   }
 }

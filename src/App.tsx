@@ -39,6 +39,13 @@ import {
 } from './services/calendarService';
 import TaskCard from './components/TaskCard';
 import StatusSection from './components/StatusSection';
+import {
+  SCHEDULE_LIST_NAME,
+  EXCLUDED_LISTS,
+  CACHE_VERSION,
+  CACHE_KEY,
+  DARK_MODE_KEY,
+} from './config';
 
 interface Attachment {
   id: string;
@@ -55,7 +62,14 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem(DARK_MODE_KEY) !== 'off'
+  );
+
+  // 다크모드 설정 저장
+  useEffect(() => {
+    localStorage.setItem(DARK_MODE_KEY, darkMode ? 'on' : 'off');
+  }, [darkMode]);
   // Auth state
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
@@ -75,26 +89,31 @@ const App: React.FC = () => {
   const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
   const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
 
-  const EXCLUDED_LISTS = ['영상제작', '교육과정수립운영', '학교자율시간', '기초학력업무', '부산여행', '보관'];
-  const CACHE_KEY = 'todo_tasks_cache';
-
   const loadWorkdayCountdown = async () => {
-    // 1. 캐시된 데이터 즉시 표시
+    // 1. 캐시된 데이터 즉시 표시 (버전 불일치 시 무시)
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
-        const cache = JSON.parse(raw) as { scheduleTasks: ScheduleTask[]; todoTasks: TodoTask[] };
-        setScheduleTasks(cache.scheduleTasks);
-        setTodoTasks(cache.todoTasks);
+        const cache = JSON.parse(raw) as {
+          version?: number;
+          scheduleTasks: ScheduleTask[];
+          todoTasks: TodoTask[];
+        };
+        if (cache.version === CACHE_VERSION) {
+          setScheduleTasks(cache.scheduleTasks);
+          setTodoTasks(cache.todoTasks);
+        } else {
+          localStorage.removeItem(CACHE_KEY);
+        }
       }
     } catch {}
 
     // 2. 백그라운드에서 최신 데이터 가져와 조용히 교체
     try {
-      const result = await loadAllTasks('학사일정복무', EXCLUDED_LISTS);
+      const result = await loadAllTasks(SCHEDULE_LIST_NAME, EXCLUDED_LISTS);
       setScheduleTasks(result.scheduleTasks);
       setTodoTasks(result.todoTasks);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(result));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ version: CACHE_VERSION, ...result }));
     } catch (e) {
       if (e instanceof Error && e.message === 'INTERACTION_REQUIRED') {
         // 토큰 만료 - 팝업 없이 로그인 상태 초기화 (UI에서 로그인 버튼 표시)
@@ -531,13 +550,13 @@ const App: React.FC = () => {
         categories: task.categories,
       }));
 
-      // Send to both services in parallel
-      const promises: Promise<any[]>[] = [];
+      // Send to both services in parallel (이름 있는 결과로 서비스별 구분)
+      const msPromise: Promise<any[]> | null =
+        authState.isMicrosoftAuthenticated && selectedListId
+          ? createTasksInBatch(selectedListId, taskDetails)
+          : null;
 
-      if (authState.isMicrosoftAuthenticated && selectedListId) {
-        promises.push(createTasksInBatch(selectedListId, taskDetails));
-      }
-
+      let googlePromise: Promise<any[]> | null = null;
       if (authState.isGoogleAuthenticated) {
         // Group tasks by calendar based on their tags
         const tasksByCalendar = new Map<string, TaskDetails[]>();
@@ -552,18 +571,18 @@ const App: React.FC = () => {
           tasksByCalendar.get(calendarId)!.push(task);
         });
 
-        // Send each group to its corresponding calendar
-        const calendarPromises = Array.from(tasksByCalendar.entries()).map(
-          ([calendarId, tasks]) => createEventsInBatch(tasks, calendarId)
-        );
-
-        // Flatten results from all calendar batches
-        promises.push(
-          Promise.all(calendarPromises).then((results) => results.flat())
-        );
+        // Send each group to its corresponding calendar, flatten results
+        googlePromise = Promise.all(
+          Array.from(tasksByCalendar.entries()).map(([calendarId, tasks]) =>
+            createEventsInBatch(tasks, calendarId)
+          )
+        ).then((results) => results.flat());
       }
 
-      const results = await Promise.allSettled(promises);
+      const [msResult, googleResult] = await Promise.allSettled([
+        msPromise ?? Promise.resolve(null),
+        googlePromise ?? Promise.resolve(null),
+      ]);
 
       // Analyze results
       let msSuccess = 0;
@@ -571,34 +590,25 @@ const App: React.FC = () => {
       let googleSuccess = 0;
       let googleTotal = 0;
 
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const successCount = result.value.filter((r: any) => r.success).length;
-          const totalCount = result.value.length;
-
-          if (index === 0 && authState.isMicrosoftAuthenticated) {
-            msSuccess = successCount;
-            msTotal = totalCount;
-          } else if (
-            (index === 0 && !authState.isMicrosoftAuthenticated) ||
-            (index === 1 && authState.isMicrosoftAuthenticated)
-          ) {
-            googleSuccess = successCount;
-            googleTotal = totalCount;
-          }
-        } else if (result.status === 'rejected') {
-          const isMsIndex = index === 0 && authState.isMicrosoftAuthenticated;
-          if (isMsIndex && result.reason instanceof Error && result.reason.message === 'INTERACTION_REQUIRED') {
-            setAuthState(prev => ({
-              ...prev,
-              isMicrosoftAuthenticated: false,
-              isAuthenticated: prev.isGoogleAuthenticated,
-              userName: undefined,
-            }));
-            setErrorMsg('Microsoft 로그인이 만료되었습니다. 다시 로그인해주세요.');
-          }
+      if (msResult.status === 'fulfilled' && msResult.value) {
+        msSuccess = msResult.value.filter((r: any) => r.success).length;
+        msTotal = msResult.value.length;
+      } else if (msResult.status === 'rejected') {
+        if (msResult.reason instanceof Error && msResult.reason.message === 'INTERACTION_REQUIRED') {
+          setAuthState(prev => ({
+            ...prev,
+            isMicrosoftAuthenticated: false,
+            isAuthenticated: prev.isGoogleAuthenticated,
+            userName: undefined,
+          }));
+          setErrorMsg('Microsoft 로그인이 만료되었습니다. 다시 로그인해주세요.');
         }
-      });
+      }
+
+      if (googleResult.status === 'fulfilled' && googleResult.value) {
+        googleSuccess = googleResult.value.filter((r: any) => r.success).length;
+        googleTotal = googleResult.value.length;
+      }
 
       // User feedback
       const messages: string[] = [];
