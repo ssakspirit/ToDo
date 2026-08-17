@@ -30,6 +30,7 @@ dist-ssr
 
 # Claude Code specific
 .commit_message.txt
+.playwright-mcp/
 
 # Old duplicate directory (not a submodule)
 todo-ai-app/
