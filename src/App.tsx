@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { AnalysisStatus, AnalyzedTask, AuthState, TaskDetails } from './types';
 import { analyzeContent } from './services/geminiService';
-import { login, logout, getAccount, loginSilently } from './services/authService';
+import { login, logout, getAccount, loginSilently, getAccessToken } from './services/authService';
 import {
   loginGoogle,
   loginGoogleSilently,
@@ -164,6 +164,15 @@ const App: React.FC = () => {
         // Try Microsoft silent login
         const msAccount = await loginSilently();
         if (msAccount) {
+          // 토큰 실제 유효성 검증 — 만료 시 INTERACTION_REQUIRED throw
+          // (검증 없이 로그인 상태로 확정하면, 이후 데이터 로드 실패의
+          //  로그인 해제 처리가 아래 setAuthState에 덮여 유령 로그인이 됨)
+          try {
+            await getAccessToken();
+          } catch (e) {
+            if (e instanceof Error && e.message === 'INTERACTION_REQUIRED') throw e;
+            // 네트워크 등 일시적 오류는 로그인 유지 (오프라인에서 캐시 데이터 표시)
+          }
           newAuthState.isMicrosoftAuthenticated = true;
           newAuthState.userName = msAccount.name || undefined;
           newAuthState.userEmail = msAccount.username || undefined;

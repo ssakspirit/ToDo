@@ -42,6 +42,9 @@ const shouldUseRedirect = (): boolean =>
   /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
   !!(window.navigator as any).standalone;
 
+// fetch 자체가 실패한 경우 (오프라인 등) — 인증 오류와 구분해 토큰을 보존
+const isNetworkError = (e: unknown): boolean => e instanceof TypeError;
+
 // PKCE utility functions
 const generateCodeVerifier = (): string => {
   const array = new Uint8Array(32);
@@ -286,7 +289,8 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
         console.log('✅ 토큰 자동 갱신 성공!');
       } catch (error) {
         console.error('❌ 토큰 갱신 실패:', error);
-        localStorage.removeItem(GOOGLE_AUTH_KEY);
+        // 오프라인 등 일시적 오류면 토큰을 지우지 않고 다음 실행에서 재시도
+        if (!isNetworkError(error)) localStorage.removeItem(GOOGLE_AUTH_KEY);
         return null;
       }
     }
@@ -297,7 +301,8 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
     return userInfo;
   } catch (error) {
     console.error('❌ Google 자동 로그인 실패:', error);
-    localStorage.removeItem(GOOGLE_AUTH_KEY);
+    // 오프라인 등 일시적 오류면 토큰을 지우지 않고 다음 실행에서 재시도
+    if (!isNetworkError(error)) localStorage.removeItem(GOOGLE_AUTH_KEY);
     return null;
   }
 };
@@ -368,6 +373,9 @@ export const getGoogleAccessToken = async (): Promise<string> => {
         console.log('토큰 자동 갱신 성공!');
       } catch (error) {
         console.error('토큰 갱신 실패:', error);
+        if (isNetworkError(error)) {
+          throw new Error('네트워크 연결을 확인해주세요.');
+        }
         localStorage.removeItem(GOOGLE_AUTH_KEY);
         throw new Error('Google 토큰 갱신에 실패했습니다. 다시 로그인해주세요.');
       }
