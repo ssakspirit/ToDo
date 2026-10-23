@@ -50,18 +50,6 @@ function fetchHolidays(year: number, month: number): Promise<HolidayRow[]> {
   return promise;
 }
 
-export async function getTodayHolidayName(): Promise<string | null> {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth() + 1;
-  const day = today.getDate();
-  const todayNum = year * 10000 + month * 100 + day;
-
-  const holidays = await fetchHolidays(year, month);
-  const match = holidays.find((h) => h.isHoliday === 'Y' && h.locdate === todayNum);
-  return match ? match.dateName : null;
-}
-
 export interface HolidayInfo {
   name: string;
   date: string; // YYYY-MM-DD

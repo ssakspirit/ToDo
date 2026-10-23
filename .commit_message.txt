@@ -1,1 +1,1 @@
-🔄 AI 분석을 Gemini에서 Claude Haiku 5.5로 전환 - 구조화 출력(zod), PDF 지원, 오류 처리 정리
+♻️ 리팩터링 - 빌드 시 타입 검사, 죽은 코드 제거, workdayService 중복 통합, 입력 영역 컴포넌트 분리, 프로덕션 console.log 제거

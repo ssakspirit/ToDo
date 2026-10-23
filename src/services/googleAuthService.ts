@@ -4,13 +4,6 @@ export interface GoogleAccountInfo {
   picture?: string;
 }
 
-interface TokenResponse {
-  access_token: string;
-  expires_in: number;
-  scope: string;
-  token_type: string;
-}
-
 interface StoredTokenInfo {
   accessToken: string;
   refreshToken?: string;
@@ -312,46 +305,6 @@ export const loginGoogleSilently = async (): Promise<GoogleAccountInfo | null> =
 export const logoutGoogle = async (): Promise<void> => {
   localStorage.removeItem(GOOGLE_AUTH_KEY);
   console.log('Google 로그아웃 완료');
-};
-
-// Get current Google account (with auto-refresh)
-export const getGoogleAccount = async (): Promise<GoogleAccountInfo | null> => {
-  const stored = localStorage.getItem(GOOGLE_AUTH_KEY);
-  if (!stored) {
-    return null;
-  }
-
-  try {
-    let tokenInfo: StoredTokenInfo = JSON.parse(stored);
-
-    // Check if token is expired
-    if (Date.now() >= tokenInfo.expiresAt) {
-      console.log('Google access token이 만료되었습니다.');
-
-      // Try to refresh using refresh token
-      if (tokenInfo.refreshToken) {
-        console.log('Refresh token으로 자동 갱신 시도...');
-        try {
-          tokenInfo = await refreshAccessToken(tokenInfo.refreshToken);
-          console.log('토큰 자동 갱신 성공!');
-        } catch (error) {
-          console.error('토큰 갱신 실패:', error);
-          localStorage.removeItem(GOOGLE_AUTH_KEY);
-          return null;
-        }
-      } else {
-        console.log('Refresh token이 없습니다.');
-        localStorage.removeItem(GOOGLE_AUTH_KEY);
-        return null;
-      }
-    }
-
-    return await getUserInfo(tokenInfo.accessToken);
-  } catch (error) {
-    console.error('Google 계정 정보 가져오기 실패:', error);
-    localStorage.removeItem(GOOGLE_AUTH_KEY);
-    return null;
-  }
 };
 
 // Get access token (with validity check and auto-refresh)

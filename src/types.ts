@@ -10,13 +10,6 @@ export interface TaskDetails {
 export interface AnalyzedTask extends TaskDetails {
   id: string;
   createdAt: number;
-  extractedInfo: {
-    sender?: string;
-    receivedDateTime?: string;
-    location?: string;
-    attendees?: string[];
-    attachmentNames?: string[];
-  };
 }
 
 export enum AnalysisStatus {

@@ -69,12 +69,6 @@ export const logout = async (): Promise<void> => {
   }
 };
 
-export const getAccount = async (): Promise<AccountInfo | null> => {
-  const msal = await initializeMsal();
-  const accounts = msal.getAllAccounts();
-  return accounts.length > 0 ? accounts[0] : null;
-};
-
 export const getAccessToken = async (): Promise<string> => {
   const msal = await initializeMsal();
   const accounts = msal.getAllAccounts();

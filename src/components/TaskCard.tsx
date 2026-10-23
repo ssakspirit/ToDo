@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnalyzedTask } from '../types';
-import { Trash2, Calendar, AlertCircle, Tag } from 'lucide-react';
+import { Trash2, Calendar, AlertCircle } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 
 interface TaskCardProps {
@@ -15,17 +15,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onDelete }) => {
     return isValid(date) ? format(date, 'yyyy-MM-dd HH:mm') : null;
   };
 
-  const importanceColors = {
-    low: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-    normal: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
-    high: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
-  };
-
-  const importanceLabels = {
-    low: '낮음',
-    normal: '보통',
-    high: '높음',
-  };
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200/50 dark:border-slate-800/50 p-3 space-y-2 transition-colors">

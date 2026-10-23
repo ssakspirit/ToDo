@@ -17,7 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start Vite dev server at http://localhost:5173
 
 # Build
-npm run build        # Production build to dist/
+npm run typecheck    # tsc --noEmit over src/ and netlify/functions/
+npm run build        # Type check + production build to dist/ (fails on any TS error)
 npm run preview      # Preview production build locally
 ```
 
@@ -175,6 +176,8 @@ authState: {
 - **`src/App.tsx`**: Main orchestrator, dual auth state, parallel send logic
 - **`netlify/functions/analyze.mts`**: AI analysis with Korean tag system and date logic (server-side)
 - **`src/services/analyzeService.ts`**: Thin client for `/api/analyze`
+- **`src/components/InputSection.tsx`**: Text/attachment input + analyze button (state lives in `App.tsx`)
+- **`src/services/workdayService.ts`**: 정액분·달력·방학 계산. Keywords (`LEAVE_TITLES`, `휴업`, 방학 시작/종료) are defined once at the top and parsed by `buildScheduleContext()`; titles must match exactly
 - **`src/services/authService.ts`**: Microsoft MSAL auth singleton
 - **`src/services/googleAuthService.ts`**: Google OAuth popup flow with localStorage tokens
 - **`src/services/todoService.ts`**: Microsoft Graph API tasks creation

@@ -46,6 +46,8 @@ export default defineConfig(({ command, mode }) => {
     },
     define: {
       'process.env': {}
-    }
+    },
+    // 프로덕션 번들에서 디버그용 console.log 제거 (console.error/warn은 유지)
+    esbuild: command === 'build' ? { pure: ['console.log'] } : undefined,
   }
 })
