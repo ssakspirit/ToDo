@@ -4,7 +4,7 @@
 
 ## 주요 기능
 
-- **AI 기반 텍스트/이미지 분석**: Google Gemini AI를 사용하여 카카오톡 캡처, 메모, 이미지에서 할 일을 자동으로 추출
+- **AI 기반 텍스트/이미지 분석**: Claude AI(Haiku 5.5)를 사용하여 카카오톡 캡처, 메모, 이미지에서 할 일을 자동으로 추출
 - **다중 이미지 처리**: 여러 장의 이미지를 한 번에 업로드하여 일괄 분석
 - **이중 서비스 연동**: 추출된 할 일을 Microsoft To Do 앱과 Google Calendar에 동시 자동 추가
 - **Google Calendar 종일 이벤트**: 기한 날짜에 종일 이벤트로 생성, 오전 7:30 자동 알림
@@ -16,48 +16,19 @@
 ### 사전 요구사항
 
 - Node.js 18 이상
-- Google Gemini API 키
+- Claude API 키
 - Microsoft Azure AD 앱 등록 (Client ID)
 - Google Cloud OAuth 클라이언트 ID
 
-### 1. Google Gemini API 키 발급
+### 1. Claude API 키 발급
 
-#### 방법 1: Google AI Studio (추천)
-
-1. [Google AI Studio](https://aistudio.google.com)에 접속
-2. Google 계정으로 로그인
-3. 좌측 메뉴에서 **"Get API key"** 또는 **"API 키 받기"** 클릭
-4. **"Create API key"** 클릭
-5. 새 프로젝트 생성 또는 기존 프로젝트 선택
-6. 생성된 API 키가 표시되면 **복사**하여 안전한 곳에 저장
-
-#### 방법 2: Google Cloud Console
-
-1. [Google Cloud Console](https://console.cloud.google.com)에 접속
-2. 프로젝트 선택 또는 새 프로젝트 생성
-3. **API 및 서비스** → **라이브러리**
-4. "Generative Language API" 또는 "Gemini API" 검색
-5. **사용 설정** 클릭
-6. **API 및 서비스** → **사용자 인증 정보**
-7. **+ 사용자 인증 정보 만들기** → **API 키**
-8. 생성된 API 키 복사
-
-#### 여러 계정에서 API 키 발급하기
-
-할당량 문제를 해결하기 위해 여러 Google 계정에서 API 키를 발급받을 수 있습니다:
-
-1. **첫 번째 계정**에서 위 방법으로 API 키 발급
-2. **두 번째 계정**으로 로그아웃 후 다시 로그인
-3. 두 번째 계정에서도 동일한 방법으로 API 키 발급
-4. 환경 변수에 쉼표로 구분하여 입력:
-   ```env
-   VITE_GEMINI_API_KEY=첫번째_키,두번째_키
-   ```
+1. [Claude Console](https://platform.claude.com)에 접속해 로그인
+2. **API Keys** → **Create Key** 클릭
+3. 생성된 키(`sk-ant-...`)를 복사해 안전한 곳에 저장
 
 **참고:**
-- 무료 티어는 일일 20회 요청 제한이 있습니다
-- 여러 키를 사용하면 할당량을 분산할 수 있습니다
-- API 키는 외부에 노출되지 않도록 주의하세요
+- 분석은 Claude Haiku 5.5(`claude-haiku-5-5`)를 사용합니다
+- API 키는 서버(Netlify Functions)에서만 사용되며 브라우저에 노출되지 않습니다
 
 ### 2. Microsoft Azure AD 앱 등록
 
@@ -124,19 +95,14 @@ cp .env.example .env
 `.env` 파일을 열어 다음 값을 입력:
 
 ```env
-VITE_GEMINI_API_KEY=your_gemini_api_key_here
+ANTHROPIC_API_KEY=your_claude_api_key_here
 VITE_MICROSOFT_CLIENT_ID=your_microsoft_client_id_here
 VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
 ```
 
-**여러 Gemini API 키 사용 (선택사항)**:
-할당량 문제를 해결하기 위해 여러 API 키를 사용할 수 있습니다. **쉼표로 구분하고 따옴표로 감싸서** 입력하세요:
+`ANTHROPIC_API_KEY`와 `GOOGLE_CLIENT_SECRET`은 서버 함수(`netlify/functions/`)에서만 읽습니다. `VITE_` 접두사를 붙이면 브라우저 번들에 포함되므로 붙이지 마세요. `npm run dev`는 서버 함수(`/api/*`)도 함께 실행합니다.
 
-```env
-VITE_GEMINI_API_KEY="api_key_1,api_key_2,api_key_3"
-```
-
-첫 번째 키의 할당량이 초과되면 자동으로 다음 키로 전환됩니다.
 
 **중요**: 여러 키를 사용할 때는 반드시 전체를 따옴표(`"`)로 감싸야 합니다.
 
@@ -179,17 +145,15 @@ GitHub 연동 후 또는 기존 사이트에서:
 1. Netlify 사이트 선택
 2. **Site configuration** 클릭
 3. 좌측 **Environment variables** 클릭
-4. **Add a variable** 버튼 클릭하여 다음 3개 추가:
+4. **Add a variable** 버튼 클릭하여 다음 변수 추가:
 
 **변수 1:**
 ```
-Key: VITE_GEMINI_API_KEY
-Value: "api_key_1,api_key_2,api_key_3"
-Scopes: Production, Deploy Previews, Branch deploys
+Key: ANTHROPIC_API_KEY
+Value: (Claude API 키)
+Scopes: Functions 포함 (기본값 All scopes)
 ```
-**중요**:
-- 여러 키를 사용할 때는 쉼표로 구분하고 **따옴표로 전체를 감싸야** 합니다
-- 모든 Scopes를 선택하세요 (Production, Deploy Previews, Branch deploys)
+**중요**: 서버 함수에서 읽는 값이므로 Scopes에 **Functions**가 포함되어야 합니다. `GOOGLE_CLIENT_SECRET`도 같은 방식으로 추가하세요.
 
 **변수 2:**
 ```
@@ -521,7 +485,7 @@ CU 편의점 1만원권 내년 3월 15일까지 사용
 
 - **Frontend**: React 19, TypeScript, Vite
 - **Styling**: Tailwind CSS
-- **AI**: Google Gemini 2.5 Flash
+- **AI**: Claude Haiku 5.5 (Netlify Functions에서 호출)
 - **Authentication**: Microsoft Authentication Library (MSAL)
 - **API**: Microsoft Graph API
 - **Icons**: Lucide React
@@ -535,7 +499,7 @@ todo-ai-app/
 │   ├── components/       # React 컴포넌트
 │   │   └── TaskCard.tsx  # 할 일 카드 컴포넌트
 │   ├── services/         # 서비스 레이어
-│   │   ├── geminiService.ts    # Gemini AI 분석
+│   │   ├── analyzeService.ts   # AI 분석 요청 (/api/analyze)
 │   │   ├── authService.ts      # Microsoft 인증
 │   │   └── todoService.ts      # To Do API
 │   ├── types.ts          # TypeScript 타입 정의

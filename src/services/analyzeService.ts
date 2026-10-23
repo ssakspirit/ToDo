@@ -1,6 +1,6 @@
 import { TaskDetails } from "../types";
 
-// Gemini 호출은 서버(netlify/functions/analyze.mts)에서 처리 — API 키를 번들에 넣지 않기 위함
+// AI 분석(Claude)은 서버(netlify/functions/analyze.mts)에서 처리 — API 키를 번들에 넣지 않기 위함
 
 // Netlify 함수 요청 본문 한도 6MB (JSON 오버헤드 감안해 여유를 둠)
 const MAX_PAYLOAD_CHARS = 5.5 * 1024 * 1024;

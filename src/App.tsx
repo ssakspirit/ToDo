@@ -15,7 +15,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { AnalysisStatus, AnalyzedTask, AuthState, TaskDetails } from './types';
-import { analyzeContent } from './services/geminiService';
+import { analyzeContent } from './services/analyzeService';
 import { login, logout, getAccount, loginSilently, getAccessToken } from './services/authService';
 import {
   loginGoogle,
@@ -51,7 +51,7 @@ import {
 interface Attachment {
   id: string;
   file: File;
-  previewUrl: string; // 압축된 data URL (미리보기 + Gemini 전송 공용)
+  previewUrl: string; // 압축된 data URL (미리보기 + AI 분석 전송 공용)
   mimeType: string;   // 압축 시 image/jpeg로 바뀔 수 있어 file.type과 별도 보관
 }
 
@@ -418,12 +418,15 @@ const App: React.FC = () => {
         const retryAfter = err?.retryAfter;
         if (retryAfter) {
           const retrySeconds = Math.ceil(retryAfter / 1000);
-          setErrorMsg(`일일 요청 한도를 초과했습니다. ${retrySeconds}초 후 다시 시도해주세요.`);
+          setErrorMsg(`요청 한도를 초과했습니다. ${retrySeconds}초 후 다시 시도해주세요.`);
         } else {
-          setErrorMsg('일일 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+          setErrorMsg('요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
         }
       } else if (isOverloaded) {
         setErrorMsg('AI 서비스가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.');
+      } else if (err?.status === 400 || err?.status === 422) {
+        // 지원하지 않는 파일 형식 등 — 서버가 보낸 안내 문구를 그대로 표시
+        setErrorMsg(err.message);
       } else {
         setErrorMsg('내용을 분석하는 중 오류가 발생했습니다. 다시 시도해주세요.');
       }

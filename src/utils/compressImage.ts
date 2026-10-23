@@ -1,4 +1,4 @@
-// 큰 사진을 긴 변 2048px JPEG로 줄여 Gemini 업로드 시간을 단축
+// 큰 사진을 긴 변 2048px JPEG로 줄여 AI 분석 업로드 시간을 단축
 // 채팅 캡처·기프티콘 바코드 숫자가 읽히는 해상도는 유지
 const MAX_DIMENSION = 2048;
 const JPEG_QUALITY = 0.85;

@@ -26,18 +26,20 @@ npm run preview      # Preview production build locally
 Required environment variables in `.env`:
 
 ```
-VITE_GEMINI_API_KEY=<Google Gemini API key>
+ANTHROPIC_API_KEY=<Claude API key>              # server-only
 VITE_MICROSOFT_CLIENT_ID=<Azure AD OAuth client ID>
 VITE_GOOGLE_CLIENT_ID=<Google Cloud OAuth client ID>
+GOOGLE_CLIENT_SECRET=<Google OAuth client secret>  # server-only
+VITE_HOLIDAY_API_KEY=<data.go.kr holiday API key>
 ```
 
 **Note**: These must also be configured in Netlify Site Settings → Environment variables for production deployment.
 
-**Secrets are server-only**: `VITE_GEMINI_API_KEY` and `VITE_GOOGLE_CLIENT_SECRET` are read by Netlify Functions (`netlify/functions/`), never by `src/` — referencing them via `import.meta.env` in client code would inline them into the public bundle. Their Netlify scope must include **Functions**. `npm run dev` runs the functions locally via `@netlify/vite-plugin` (`vite.config.ts` injects `.env` into `process.env` for them).
+**Secrets are server-only**: `ANTHROPIC_API_KEY` and `GOOGLE_CLIENT_SECRET` are read by Netlify Functions (`netlify/functions/`), never by `src/` — never give them a `VITE_` prefix or reference them via `import.meta.env`, which would inline them into the public bundle. Their Netlify scope must include **Functions**. `npm run dev` runs the functions locally via `@netlify/vite-plugin` (`vite.config.ts` injects `.env` into `process.env` for them).
 
 | Endpoint | Function | Purpose |
 |---|---|---|
-| `POST /api/analyze` | `analyze.mts` | Gemini analysis (prompt, schema, key rotation, retry) |
+| `POST /api/analyze` | `analyze.mts` | Claude Haiku 5.5 analysis (prompt, zod structured output, error mapping) |
 | `POST /api/google-token` | `google-token.mts` | Google OAuth code exchange / refresh (adds client_secret) |
 
 ## Architecture Overview
@@ -55,7 +57,7 @@ This app integrates with **both Microsoft To Do and Google Calendar** simultaneo
 
 **Task Flow**:
 1. User inputs text/images
-2. **Gemini AI Analysis** (`geminiService.ts`): Extracts structured tasks with Korean tag system
+2. **Claude AI Analysis** (`analyzeService.ts` → `/api/analyze`): Extracts structured tasks with Korean tag system
 3. **Dual Send** (`handleSendToBoth` in `App.tsx`): Uses `Promise.allSettled()` to send to both services in parallel
 4. **Microsoft To Do** (`todoService.ts`): Creates tasks via Microsoft Graph API
 5. **Google Calendar** (`calendarService.ts`): Creates all-day events with 7:30 AM reminders
@@ -75,7 +77,7 @@ All tasks **must** have a title in this format: `#RequiredTag #AdditionalTag con
 
 ### Date Handling Logic
 
-Critical rules implemented in `geminiService.ts`:
+Critical rules implemented in the prompt in `netlify/functions/analyze.mts` (today's date and weekday are computed in Asia/Seoul):
 
 1. **Due DateTime**: Always 23:59:00 on due date
 2. **No Due Date Specified**: Default to today
@@ -109,21 +111,22 @@ Critical rules implemented in `geminiService.ts`:
 |---------|------|-----|---------|
 | Microsoft | `authService.ts` | `todoService.ts` | MSAL singleton, Graph API tasks |
 | Google | `googleAuthService.ts` | `calendarService.ts` | OAuth popup flow, Calendar API events |
-| Gemini | N/A | `geminiService.ts` | Structured JSON extraction via schema |
+| Claude | N/A (server key) | `analyzeService.ts` → `analyze.mts` | Structured JSON extraction via schema |
 
 **Shared Patterns**:
 - Auth services: `login()`, `loginSilently()`, `logout()`, `getAccessToken()`
 - API services: `createTasksInBatch()` / `createEventsInBatch()` using sequential processing
 - Error handling: Try/catch at service layer, state updates at component layer
 
-## Gemini AI Schema
+## Claude AI Schema
 
-The AI uses **structured output** (not conversational prompts). Schema defined in `geminiService.ts`:
+The AI uses **structured output** via `client.messages.parse()` with model `claude-haiku-5-5`. Zod schema defined in `analyze.mts` (top level must be an object, so tasks are wrapped):
 
 ```typescript
-responseMimeType: "application/json"
-responseSchema: { type: Type.ARRAY, items: taskItemSchema }
+output_config: { effort: "medium", format: zodOutputFormat(z.object({ tasks: z.array(TaskSchema) })) }
 ```
+
+Haiku 5.5 rejects `temperature`/`top_p`/`top_k` and assistant prefill (400) — don't add them. Attachments: JPG/PNG/GIF/WEBP as `image` blocks, PDF as `document` block; other types are rejected with 400.
 
 **Critical Instructions in Prompt**:
 - Title must include tags: `#필수태그 #추가태그 내용`
@@ -171,7 +174,7 @@ authState: {
 
 - **`src/App.tsx`**: Main orchestrator, dual auth state, parallel send logic
 - **`netlify/functions/analyze.mts`**: AI analysis with Korean tag system and date logic (server-side)
-- **`src/services/geminiService.ts`**: Thin client for `/api/analyze`
+- **`src/services/analyzeService.ts`**: Thin client for `/api/analyze`
 - **`src/services/authService.ts`**: Microsoft MSAL auth singleton
 - **`src/services/googleAuthService.ts`**: Google OAuth popup flow with localStorage tokens
 - **`src/services/todoService.ts`**: Microsoft Graph API tasks creation

@@ -1,1 +1,1 @@
-🔒 Gemini 분석·구글 토큰 교환을 Netlify Functions로 이전 - 번들에서 API 키·client secret 제거, 분석 프롬프트에 요일 추가
+🔄 AI 분석을 Gemini에서 Claude Haiku 5.5로 전환 - 구조화 출력(zod), PDF 지원, 오류 처리 정리
