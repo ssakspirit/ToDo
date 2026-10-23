@@ -8,7 +8,7 @@ function parseXmlHolidays(xmlText: string): Array<{ dateName: string; locdate: n
   const doc = parser.parseFromString(xmlText, 'application/xml');
 
   const resultCode = doc.querySelector('resultCode')?.textContent;
-  if (resultCode !== '00') return [];
+  if (resultCode !== '00') throw new Error(`공휴일 API 오류: ${resultCode ?? '응답 형식 오류'}`);
 
   const items = doc.querySelectorAll('item');
   const result: Array<{ dateName: string; locdate: number; isHoliday: string }> = [];
@@ -33,10 +33,18 @@ function fetchHolidays(year: number, month: number): Promise<HolidayRow[]> {
   const monthStr = String(month).padStart(2, '0');
   const url = `${BASE_URL}?serviceKey=${apiKey}&solYear=${year}&solMonth=${monthStr}&numOfRows=50`;
 
+  // 실패 결과는 캐시하지 않음 — 다음 갱신(폴링/탭 복귀) 때 다시 시도
   const promise = fetch(url)
-    .then((res) => (res.ok ? res.text() : ''))
-    .then((xmlText) => (xmlText ? parseXmlHolidays(xmlText) : []))
-    .catch(() => [] as HolidayRow[]);
+    .then((res) => {
+      if (!res.ok) throw new Error(`공휴일 API HTTP ${res.status}`);
+      return res.text();
+    })
+    .then(parseXmlHolidays)
+    .catch((e) => {
+      console.error('공휴일 조회 실패:', e);
+      holidayCache.delete(key);
+      return [] as HolidayRow[];
+    });
 
   holidayCache.set(key, promise);
   return promise;

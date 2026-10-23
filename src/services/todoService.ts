@@ -203,6 +203,8 @@ export const createTasksInBatch = async (
       const result = await createTask(listId, task);
       results.push({ success: true, data: result });
     } catch (error) {
+      // 로그인 만료는 나머지 작업도 모두 실패하므로 중단하고 호출부에서 재로그인 처리
+      if (error instanceof Error && error.message === 'INTERACTION_REQUIRED') throw error;
       results.push({ success: false, error, task });
     }
   }

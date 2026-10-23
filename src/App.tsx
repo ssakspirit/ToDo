@@ -37,6 +37,7 @@ import {
   getCalendarLists,
   CalendarList,
 } from './services/calendarService';
+import { compressImage } from './utils/compressImage';
 import TaskCard from './components/TaskCard';
 import StatusSection from './components/StatusSection';
 import {
@@ -50,7 +51,8 @@ import {
 interface Attachment {
   id: string;
   file: File;
-  previewUrl: string;
+  previewUrl: string; // 압축된 data URL (미리보기 + Gemini 전송 공용)
+  mimeType: string;   // 압축 시 image/jpeg로 바뀔 수 있어 file.type과 별도 보관
 }
 
 const App: React.FC = () => {
@@ -230,10 +232,10 @@ const App: React.FC = () => {
     try {
       const lists = await getCalendarLists();
       setCalendarLists(lists);
-      if (lists.length > 0 && !selectedCalendarId) {
-        // 'primary' 캘린더를 기본으로 선택하거나 첫 번째 캘린더 선택
-        const primaryCalendar = lists.find(cal => cal.id === 'primary') || lists[0];
-        setSelectedCalendarId(primaryCalendar.id);
+      // 'primary' 별칭은 목록에 없으므로 실제 기본 캘린더 ID로 바꿔 드롭다운 표시와 값을 일치시킴
+      const primaryCalendar = lists.find((cal) => cal.primary) || lists[0];
+      if (primaryCalendar) {
+        setSelectedCalendarId((prev) => (prev === 'primary' ? primaryCalendar.id : prev));
       }
     } catch (error) {
       console.error('캘린더 목록 로드 실패:', error);
@@ -302,23 +304,19 @@ const App: React.FC = () => {
     }
   };
 
-  const processFiles = (files: FileList | File[]) => {
+  const processFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
-
-    fileArray.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAttachments((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            file,
-            previewUrl: reader.result as string,
-          },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
+    // 한꺼번에 추가해 선택 순서 유지 (연속 캡처 그룹화에 순서가 중요)
+    const processed = await Promise.all(fileArray.map(compressImage));
+    setAttachments((prev) => [
+      ...prev,
+      ...processed.map(({ dataUrl, mimeType }, i) => ({
+        id: crypto.randomUUID(),
+        file: fileArray[i],
+        previewUrl: dataUrl,
+        mimeType,
+      })),
+    ]);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -367,82 +365,6 @@ const App: React.FC = () => {
     setTasks((prev) => prev.filter((task) => task.id !== id));
   };
 
-  // 태그에 따라 캘린더 자동 선택
-  const selectCalendarByTag = (firstTag: string, title: string) => {
-    if (!authState.isGoogleAuthenticated || calendarLists.length === 0) {
-      return;
-    }
-
-    // 태그를 소문자로 변환하여 매칭
-    const tagLower = firstTag.toLowerCase();
-    
-    // 태그에 따른 캘린더 매핑 (캘린더 이름에 따라 자동 매칭)
-    let targetCalendarId: string | null = null;
-
-    // #기프티콘 태그가 있는 경우 (우선순위 높음)
-    if (hasTag(title, '#기프티콘') || hasTag(title, '기프티콘')) {
-      const giftCalendar = calendarLists.find(cal => 
-        cal.summary.toLowerCase().includes('기프티콘') || 
-        cal.summary.toLowerCase().includes('gift')
-      );
-      if (giftCalendar) {
-        targetCalendarId = giftCalendar.id;
-      }
-    }
-    // #일정 태그인 경우
-    else if (tagLower === '#일정' || tagLower === '일정') {
-      // "Ssak" 또는 "Tasks" 캘린더 찾기
-      const ssakCalendar = calendarLists.find(cal => 
-        cal.summary.toLowerCase().includes('ssak') || 
-        cal.summary.toLowerCase().includes('일정')
-      );
-      if (ssakCalendar) {
-        targetCalendarId = ssakCalendar.id;
-      }
-    }
-    // #기한 태그인 경우
-    else if (tagLower === '#기한' || tagLower === '기한') {
-      // "Tasks" 캘린더 찾기
-      const tasksCalendar = calendarLists.find(cal => 
-        cal.summary.toLowerCase().includes('tasks') || 
-        cal.summary.toLowerCase().includes('작업')
-      );
-      if (tasksCalendar) {
-        targetCalendarId = tasksCalendar.id;
-      }
-    }
-    // #작업 태그인 경우
-    else if (tagLower === '#작업' || tagLower === '작업') {
-      // "Tasks" 캘린더 찾기
-      const tasksCalendar = calendarLists.find(cal => 
-        cal.summary.toLowerCase().includes('tasks') || 
-        cal.summary.toLowerCase().includes('작업')
-      );
-      if (tasksCalendar) {
-        targetCalendarId = tasksCalendar.id;
-      }
-    }
-
-    // 매칭된 캘린더가 있으면 선택
-    if (targetCalendarId) {
-      setSelectedCalendarId(targetCalendarId);
-    }
-  };
-
-  // 제목에서 첫 번째 태그 추출
-  const extractFirstTag = (title: string): string | null => {
-    // #으로 시작하는 첫 번째 태그 찾기
-    const tagMatch = title.match(/#[^\s#]+/);
-    return tagMatch ? tagMatch[0] : null;
-  };
-
-  // 제목에서 특정 태그 찾기 (모든 태그 검색)
-  const hasTag = (title: string, tag: string): boolean => {
-    const tagLower = tag.toLowerCase();
-    const titleLower = title.toLowerCase();
-    return titleLower.includes(tagLower);
-  };
-
   const handleAnalyze = async () => {
     if (!inputText && attachments.length === 0) {
       setErrorMsg('분석할 텍스트를 입력하거나 파일을 업로드해주세요.');
@@ -455,7 +377,7 @@ const App: React.FC = () => {
     try {
       const imagesPayload = attachments.map((att) => ({
         data: att.previewUrl.split(',')[1],
-        mimeType: att.file.type,
+        mimeType: att.mimeType,
       }));
 
       const results = await analyzeContent(inputText, imagesPayload);
@@ -471,14 +393,6 @@ const App: React.FC = () => {
 
       setTasks((prev) => [...newTasks, ...prev]);
       setStatus(AnalysisStatus.SUCCESS);
-
-      // 첫 번째 태그에 따라 캘린더 자동 선택
-      if (newTasks.length > 0 && authState.isGoogleAuthenticated) {
-        const firstTag = extractFirstTag(newTasks[0].title);
-        if (firstTag) {
-          selectCalendarByTag(firstTag, newTasks[0].title);
-        }
-      }
 
       setInputText('');
       setAttachments([]);
@@ -516,17 +430,15 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper: Extract required tag from task title
-  const getRequiredTag = (title: string): string | null => {
-    const match = title.match(/#(일정|기한|작업)/);
-    return match ? `#${match[1]}` : null;
-  };
-
-  // Helper: Find matching calendar ID by tag
-  const findCalendarByTag = (tag: string | null): string => {
-    if (!tag) return 'primary';
-    const calendar = calendarLists.find((cal) => cal.summary === tag);
-    return calendar ? calendar.id : 'primary';
+  // 작업 제목의 태그와 이름이 같은 캘린더로 전송, 없으면 드롭다운에서 고른 캘린더
+  // 우선순위: #기프티콘 > 필수태그(#일정/#기한/#작업)
+  const resolveCalendarId = (title: string): string => {
+    const byName = (name: string) => calendarLists.find((cal) => cal.summary === name);
+    const required = title.match(/#(일정|기한|작업)/)?.[0];
+    const calendar =
+      (title.includes('#기프티콘') ? byName('#기프티콘') : undefined) ??
+      (required ? byName(required) : undefined);
+    return calendar?.id ?? selectedCalendarId;
   };
 
   const handleSendToBoth = async () => {
@@ -571,8 +483,7 @@ const App: React.FC = () => {
         const tasksByCalendar = new Map<string, TaskDetails[]>();
 
         taskDetails.forEach((task) => {
-          const tag = getRequiredTag(task.title);
-          const calendarId = findCalendarByTag(tag);
+          const calendarId = resolveCalendarId(task.title);
 
           if (!tasksByCalendar.has(calendarId)) {
             tasksByCalendar.set(calendarId, []);
@@ -594,48 +505,52 @@ const App: React.FC = () => {
       ]);
 
       // Analyze results
+      // 거부(rejected)된 서비스는 전체 실패로 집계 — total을 0으로 두면 성공으로 오판해 작업이 지워짐
+      const total = taskDetails.length;
       let msSuccess = 0;
-      let msTotal = 0;
       let googleSuccess = 0;
-      let googleTotal = 0;
+      let msExpired = false;
 
       if (msResult.status === 'fulfilled' && msResult.value) {
         msSuccess = msResult.value.filter((r: any) => r.success).length;
-        msTotal = msResult.value.length;
       } else if (msResult.status === 'rejected') {
         if (msResult.reason instanceof Error && msResult.reason.message === 'INTERACTION_REQUIRED') {
+          msExpired = true;
           setAuthState(prev => ({
             ...prev,
             isMicrosoftAuthenticated: false,
             isAuthenticated: prev.isGoogleAuthenticated,
             userName: undefined,
           }));
-          setErrorMsg('Microsoft 로그인이 만료되었습니다. 다시 로그인해주세요.');
         }
       }
 
       if (googleResult.status === 'fulfilled' && googleResult.value) {
         googleSuccess = googleResult.value.filter((r: any) => r.success).length;
-        googleTotal = googleResult.value.length;
       }
 
       // User feedback
       const messages: string[] = [];
       if (authState.isMicrosoftAuthenticated) {
-        messages.push(`Microsoft: ${msSuccess}/${msTotal}`);
+        messages.push(`Microsoft: ${msSuccess}/${total}`);
       }
       if (authState.isGoogleAuthenticated) {
-        messages.push(`Google: ${googleSuccess}/${googleTotal}`);
+        messages.push(`Google: ${googleSuccess}/${total}`);
       }
 
       const allSuccess =
-        (authState.isMicrosoftAuthenticated ? msSuccess === msTotal : true) &&
-        (authState.isGoogleAuthenticated ? googleSuccess === googleTotal : true);
+        (authState.isMicrosoftAuthenticated ? msSuccess === total : true) &&
+        (authState.isGoogleAuthenticated ? googleSuccess === total : true);
 
       if (allSuccess) {
         setTasks([]);
       } else {
-        setErrorMsg(`${messages.join(', ')} 성공`);
+        const summary = `${messages.join(', ')} 성공`;
+        setErrorMsg(
+          msExpired
+            ? `Microsoft 로그인이 만료되었습니다. 다시 로그인 후 전송해주세요. (${summary})`
+            : summary
+        );
       }
     } catch (error) {
       console.error('작업 전송 실패:', error);
@@ -867,6 +782,7 @@ const App: React.FC = () => {
                     <select
                       value={selectedCalendarId}
                       onChange={(e) => setSelectedCalendarId(e.target.value)}
+                      title="태그(#일정·#기한·#작업·#기프티콘)와 이름이 같은 캘린더가 없을 때 사용할 캘린더"
                       className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50 rounded text-xs focus:ring-1 focus:ring-slate-300 dark:focus:ring-slate-700 outline-none"
                     >
                       {calendarLists.map((calendar) => (

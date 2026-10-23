@@ -4,6 +4,7 @@ import { TaskDetails } from '../types';
 export interface CalendarList {
   id: string;
   summary: string;
+  primary?: boolean;
   backgroundColor?: string;
   foregroundColor?: string;
 }
@@ -133,12 +134,16 @@ export const getCalendarLists = async (): Promise<CalendarList[]> => {
     }
 
     const data = await response.json();
-    return data.items.map((item: any) => ({
-      id: item.id,
-      summary: item.summary,
-      backgroundColor: item.backgroundColor,
-      foregroundColor: item.foregroundColor,
-    }));
+    // 일정을 추가할 수 없는 읽기 전용 캘린더(공휴일 등)는 제외
+    return data.items
+      .filter((item: any) => item.accessRole === 'owner' || item.accessRole === 'writer')
+      .map((item: any) => ({
+        id: item.id,
+        summary: item.summary,
+        primary: item.primary === true,
+        backgroundColor: item.backgroundColor,
+        foregroundColor: item.foregroundColor,
+      }));
   } catch (error) {
     console.error('캘린더 목록 가져오기 실패:', error);
     throw error;

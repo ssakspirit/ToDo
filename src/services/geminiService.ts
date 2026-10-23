@@ -4,26 +4,17 @@ import { TaskDetails } from "../types";
 // 여러 API 키 지원 (쉼표로 구분)
 const getApiKeys = (): string[] => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-  console.log('[DEBUG] 원본 환경 변수:', apiKey);
-  console.log('[DEBUG] 환경 변수 길이:', apiKey.length);
   // 쉼표로 구분된 여러 키 지원
   const keys = apiKey.split(',')
     .map(key => key.trim())
     .map(key => key.replace(/^["']|["']$/g, '')) // 앞뒤 따옴표 제거
     .filter(key => key.length > 0);
-  console.log('[DEBUG] 분리된 키 배열:', keys.map(k => k.substring(0, 20) + '...'));
   return keys.length > 0 ? keys : [];
 };
 
 // API 키 배열
 const apiKeys = getApiKeys();
 let currentKeyIndex = 0;
-
-// 디버깅: API 키 개수 확인
-console.log(`[Gemini Service] 로드된 API 키 개수: ${apiKeys.length}`);
-if (apiKeys.length > 0) {
-  console.log(`[Gemini Service] 첫 번째 키: ${apiKeys[0].substring(0, 20)}...`);
-}
 
 // 현재 API 키 가져오기
 const getCurrentApiKey = (): string => {
@@ -77,28 +68,6 @@ const taskItemSchema: Schema = {
       items: { type: Type.STRING },
       description: "할 일의 카테고리 또는 태그 목록 (한국어)",
     },
-    sender: {
-      type: Type.STRING,
-      description: "메시지 보낸 사람의 이름. 스크린샷에서 상단이나 메시지 옆에 표시된 이름. 알 수 없으면 '알 수 없음'",
-    },
-    receivedDateTime: {
-      type: Type.STRING,
-      description: "메시지 수신 날짜 및 시간 (ISO 8601 형식)",
-    },
-    location: {
-      type: Type.STRING,
-      description: "장소 또는 위치 정보 (한국어)",
-    },
-    attendees: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "참석자 또는 관련 인물 목록 (한국어)",
-    },
-    attachmentNames: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "메시지 내용 또는 스크린샷에 표시된 첨부파일 이름. 캡처 이미지 자체의 파일명은 포함하지 않음.",
-    },
   },
   required: ["title", "body", "importance"],
 };
@@ -120,8 +89,12 @@ export const analyzeContent = async (
     });
   });
 
+  // toISOString()은 UTC라 한국 시간 0~9시엔 전날이 됨 → 로컬 날짜로 직접 조합
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
   const promptText = `주어진 텍스트 및/또는 이미지를 분석하여 할 일(To-Do) 항목을 추출하세요.
-현재 날짜: ${new Date().toISOString().split('T')[0]} (${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 ${new Date().getDate()}일)
+현재 날짜: ${todayStr} (${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일)
 
 [중요 규칙]
 1. **제목 태그 필수**: 모든 할 일 제목은 "#필수태그 #추가태그 내용" 형식
@@ -200,7 +173,7 @@ ${text}`;
       const attemptApiKey = apiKeys[currentAttemptKeyIndex];
       triedKeys.add(currentAttemptKeyIndex);
       
-      console.log(`API 키 시도 (${currentAttemptKeyIndex + 1}/${apiKeys.length}): ${attemptApiKey.substring(0, 20)}...`);
+      console.log(`API 키 시도 (${currentAttemptKeyIndex + 1}/${apiKeys.length})`);
       
       const aiInstance = createAIInstance(attemptApiKey);
       
