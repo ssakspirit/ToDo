@@ -53,7 +53,7 @@ function getDates(tasks: ScheduleTask[], title: string): Date[] {
 export interface MonthlyWorkdayStats {
   currentWorkdays: number;   // 현재 근무일 (오늘까지 실제 정상근무)
   availableWorkdays: number; // 근무 가능일 (남은 평일)
-  leaveUsed: number;         // 복무 사용일 (조퇴/지각/연가/병가 등)
+  leaveUsed: number;         // 복무 사용일 (조퇴/지각/연가/병가/공가 등)
   availableLeave: number;    // 복무 사용 가능일 (추가로 쉴 수 있는 여유일수)
   status: '목표 달성' | '도전중' | '달성 실패';
 }
@@ -81,7 +81,7 @@ export async function getMonthCalendarData(
       .map(dateKey)
   );
 
-  const LEAVE_TITLES = ['연가', '병가', '조퇴', '지각', '병조퇴', '병지각'];
+  const LEAVE_TITLES = ['연가', '병가', '공가', '조퇴', '지각', '병조퇴', '병지각'];
   const leaveDateMap = new Map<string, string[]>();
   LEAVE_TITLES.forEach((title) => {
     getDates(tasks, title)
@@ -158,7 +158,7 @@ export async function getMonthlyWorkdayStats(
       .map(dateKey)
   );
 
-  const LEAVE_TITLES = ['연가', '병가', '조퇴', '지각', '병조퇴', '병지각'];
+  const LEAVE_TITLES = ['연가', '병가', '공가', '조퇴', '지각', '병조퇴', '병지각'];
   const leaveDateSet = new Set<string>();
   LEAVE_TITLES.forEach((title) => {
     getDates(tasks, title)
