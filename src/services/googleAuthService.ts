@@ -20,7 +20,8 @@ interface StoredTokenInfo {
 
 const GOOGLE_AUTH_KEY = 'google_auth_token';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
+// 토큰 교환/갱신은 서버(netlify/functions/google-token.mts)가 client_secret을 붙여 대신 요청
+const TOKEN_PROXY_URL = '/api/google-token';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/userinfo.email',
@@ -42,8 +43,16 @@ const shouldUseRedirect = (): boolean =>
   /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
   !!(window.navigator as any).standalone;
 
-// fetch 자체가 실패한 경우 (오프라인 등) — 인증 오류와 구분해 토큰을 보존
-const isNetworkError = (e: unknown): boolean => e instanceof TypeError;
+// 일시적 오류 (오프라인 등 fetch 자체 실패, 또는 서버 5xx) — 인증 오류와 구분해 토큰을 보존
+const isNetworkError = (e: unknown): boolean =>
+  e instanceof TypeError || (e as any)?.transient === true;
+
+// 5xx 응답은 토큰 문제가 아니라 서버(프록시/Google) 장애이므로 일시적 오류로 표시
+const httpError = (message: string, status: number): Error => {
+  const error = new Error(message);
+  if (status >= 500) (error as any).transient = true;
+  return error;
+};
 
 // PKCE utility functions
 const generateCodeVerifier = (): string => {
@@ -68,14 +77,10 @@ const generateCodeChallenge = async (verifier: string): Promise<string> => {
 
 // Refresh access token using refresh token
 const refreshAccessToken = async (refreshToken: string): Promise<StoredTokenInfo> => {
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const response = await fetch(TOKEN_PROXY_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),
@@ -84,7 +89,7 @@ const refreshAccessToken = async (refreshToken: string): Promise<StoredTokenInfo
   if (!response.ok) {
     const errorText = await response.text();
     console.error('토큰 갱신 실패:', response.status, errorText);
-    throw new Error('토큰 갱신에 실패했습니다.');
+    throw httpError('토큰 갱신에 실패했습니다.', response.status);
   }
 
   const data = await response.json();
@@ -215,17 +220,13 @@ const exchangeCodeForTokens = async (
   codeVerifier: string
 ): Promise<GoogleAccountInfo> => {
   try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
+    const response = await fetch(TOKEN_PROXY_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
         code,
         code_verifier: codeVerifier,
-        grant_type: 'authorization_code',
         redirect_uri: window.location.origin,
       }),
     });
@@ -400,7 +401,7 @@ const getUserInfo = async (accessToken: string): Promise<GoogleAccountInfo> => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Google 사용자 정보 API 오류:', response.status, errorText);
-      throw new Error(`사용자 정보를 가져올 수 없습니다. (${response.status})`);
+      throw httpError(`사용자 정보를 가져올 수 없습니다. (${response.status})`, response.status);
     }
 
     const data = await response.json();

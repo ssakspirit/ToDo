@@ -34,3 +34,6 @@ dist-ssr
 
 # Old duplicate directory (not a submodule)
 todo-ai-app/
+
+# Local Netlify folder
+.netlify

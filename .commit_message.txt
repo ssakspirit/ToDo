@@ -1,1 +1,1 @@
-🐛 보안·버그·성능 개선 - API 키 로그 제거, 분석 날짜 KST 수정, 캘린더 라우팅·MS 만료 처리·공휴일 캐시 수정, 이미지 압축, Gemini 스키마 정리
+🔒 Gemini 분석·구글 토큰 교환을 Netlify Functions로 이전 - 번들에서 API 키·client secret 제거, 분석 프롬프트에 요일 추가

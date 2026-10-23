@@ -411,7 +411,9 @@ const App: React.FC = () => {
                           err?.message?.includes('overloaded') ||
                           err?.message?.includes('UNAVAILABLE');
       
-      if (isQuotaExceeded) {
+      if (err?.message === 'PAYLOAD_TOO_LARGE') {
+        setErrorMsg('첨부 이미지가 너무 큽니다. 이미지 수를 줄여 나눠서 분석해주세요.');
+      } else if (isQuotaExceeded) {
         // retryAfter 정보가 있으면 표시
         const retryAfter = err?.retryAfter;
         if (retryAfter) {

@@ -33,6 +33,13 @@ VITE_GOOGLE_CLIENT_ID=<Google Cloud OAuth client ID>
 
 **Note**: These must also be configured in Netlify Site Settings → Environment variables for production deployment.
 
+**Secrets are server-only**: `VITE_GEMINI_API_KEY` and `VITE_GOOGLE_CLIENT_SECRET` are read by Netlify Functions (`netlify/functions/`), never by `src/` — referencing them via `import.meta.env` in client code would inline them into the public bundle. Their Netlify scope must include **Functions**. `npm run dev` runs the functions locally via `@netlify/vite-plugin` (`vite.config.ts` injects `.env` into `process.env` for them).
+
+| Endpoint | Function | Purpose |
+|---|---|---|
+| `POST /api/analyze` | `analyze.mts` | Gemini analysis (prompt, schema, key rotation, retry) |
+| `POST /api/google-token` | `google-token.mts` | Google OAuth code exchange / refresh (adds client_secret) |
+
 ## Architecture Overview
 
 ### Dual-Service Integration Pattern
@@ -163,7 +170,8 @@ authState: {
 ## Key Files
 
 - **`src/App.tsx`**: Main orchestrator, dual auth state, parallel send logic
-- **`src/services/geminiService.ts`**: AI analysis with Korean tag system and date logic
+- **`netlify/functions/analyze.mts`**: AI analysis with Korean tag system and date logic (server-side)
+- **`src/services/geminiService.ts`**: Thin client for `/api/analyze`
 - **`src/services/authService.ts`**: Microsoft MSAL auth singleton
 - **`src/services/googleAuthService.ts`**: Google OAuth popup flow with localStorage tokens
 - **`src/services/todoService.ts`**: Microsoft Graph API tasks creation
