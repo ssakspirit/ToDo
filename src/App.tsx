@@ -285,6 +285,10 @@ const App: React.FC = () => {
       setSelectedListId('');
       setCalendarLists([]);
       setSelectedCalendarId('primary');
+      // 기기에 남은 작업·일정 캐시와 화면 데이터도 정리
+      localStorage.removeItem(CACHE_KEY);
+      setScheduleTasks([]);
+      setTodoTasks([]);
     } catch (error) {
       console.error('로그아웃 실패:', error);
     }

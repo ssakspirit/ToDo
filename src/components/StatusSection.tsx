@@ -161,7 +161,24 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
   const [newTitle, setNewTitle] = useState('');
   const [newListId, setNewListId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // 완료/추가 실패를 잠깐 표시 (로그인 만료는 별도 안내)
+  const showActionError = useCallback((action: string, e: unknown) => {
+    console.error(`${action} 실패:`, e);
+    const expired = e instanceof Error && e.message === 'INTERACTION_REQUIRED';
+    setActionError(
+      expired
+        ? 'Microsoft 로그인이 만료되었습니다. 다시 로그인해주세요.'
+        : `${action}에 실패했습니다. 잠시 후 다시 시도해주세요.`
+    );
+    clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setActionError(null), 5000);
+  }, []);
+
+  useEffect(() => () => clearTimeout(errorTimerRef.current), []);
 
   const handleCreate = useCallback(async (dueDate: string) => {
     const title = newTitle.trim();
@@ -171,11 +188,13 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
     try {
       await onTaskCreate(listId, title, dueDate);
       setNewTitle('');
+    } catch (e) {
+      showActionError('작업 추가', e);
     } finally {
       setCreating(false);
       inputRef.current?.focus();
     }
-  }, [newTitle, newListId, todoLists, creating, onTaskCreate]);
+  }, [newTitle, newListId, todoLists, creating, onTaskCreate, showActionError]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -197,10 +216,10 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
         setCompletingIds((prev) => { const s = new Set(prev); s.delete(task.id); return s; });
       }, 600);
     } catch (e) {
-      console.error('완료 처리 실패:', e);
+      showActionError('완료 처리', e);
       setCompletingIds((prev) => { const s = new Set(prev); s.delete(task.id); return s; });
     }
-  }, [completingIds, onTaskComplete]);
+  }, [completingIds, onTaskComplete, showActionError]);
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, TodoTask[]>();
@@ -261,7 +280,9 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
     getWorkdayCountdown(scheduleTasks).then(setCountdown).catch(console.error);
   }, [scheduleTasks]);
 
-  if (scheduleTasks.length === 0) return null;
+  // 학사일정 목록이 비어 있으면 달력·정액분만 숨기고 작업 목록은 계속 표시
+  const hasSchedule = scheduleTasks.length > 0;
+  if (!hasSchedule && todoTasks.length === 0) return null;
 
   const prevMonth = () => {
     if (viewMonth === 1) { setViewYear((y) => y - 1); setViewMonth(12); }
@@ -286,6 +307,13 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
 
   return (
     <div className="space-y-2">
+      {actionError && (
+        <div className="px-4 py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-lg border border-red-100 dark:border-red-900/30">
+          {actionError}
+        </div>
+      )}
+
+      {hasSchedule && (<>
       {/* Calendar card */}
       <div className={`${card} px-3 py-2.5`}>
         {/* Month navigation */}
@@ -517,6 +545,8 @@ const StatusSection: React.FC<Props> = ({ scheduleTasks, todoTasks, todoLists, o
           </div>
         );
       })()}
+
+      </>)}
 
       {/* 기한 지난 작업 */}
       {overdueTasks.length > 0 && (
