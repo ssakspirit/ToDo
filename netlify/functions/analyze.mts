@@ -212,4 +212,6 @@ export default async (req: Request) => {
 export const config: Config = {
   path: "/api/analyze",
   method: "POST",
+  // 공개 엔드포인트라 남이 Claude 요금을 쓰지 못하도록 IP당 1분 10회로 제한 (초과 시 429)
+  rateLimit: { windowLimit: 10, windowSize: 60, aggregateBy: ["ip", "domain"] },
 };

@@ -40,10 +40,10 @@ const shouldUseRedirect = (): boolean =>
 const isNetworkError = (e: unknown): boolean =>
   e instanceof TypeError || (e as any)?.transient === true;
 
-// 5xx 응답은 토큰 문제가 아니라 서버(프록시/Google) 장애이므로 일시적 오류로 표시
+// 5xx(서버·프록시 장애, 서버 secret 오류 502)와 429(요청 제한)는 토큰 문제가 아니므로 일시적 오류로 표시
 const httpError = (message: string, status: number): Error => {
   const error = new Error(message);
-  if (status >= 500) (error as any).transient = true;
+  if (status >= 500 || status === 429) (error as any).transient = true;
   return error;
 };
 
