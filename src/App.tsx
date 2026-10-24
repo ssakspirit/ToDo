@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CheckSquare,
   Moon,
@@ -7,8 +7,9 @@ import {
   LogOut,
   Send,
   Loader2,
+  Settings,
 } from 'lucide-react';
-import { AnalysisStatus, AnalyzedTask, AuthState, TaskDetails } from './types';
+import { AnalysisStatus, AnalyzedTask, AuthState, ServiceKey, TaskDetails } from './types';
 import { analyzeContent } from './services/analyzeService';
 import { login, logout, loginSilently, getAccessToken } from './services/authService';
 import {
@@ -32,16 +33,13 @@ import {
   CalendarList,
 } from './services/calendarService';
 import { compressImage } from './utils/compressImage';
+import { pendingFor, sendPending, markSent, removeCompleted } from './utils/sendPlan';
 import TaskCard from './components/TaskCard';
 import InputSection, { Attachment } from './components/InputSection';
 import StatusSection from './components/StatusSection';
-import {
-  SCHEDULE_LIST_NAME,
-  EXCLUDED_LISTS,
-  CACHE_VERSION,
-  CACHE_KEY,
-  DARK_MODE_KEY,
-} from './config';
+import { CACHE_VERSION, CACHE_KEY, DARK_MODE_KEY } from './config';
+import { loadSettings, saveSettings, AppSettings } from './services/settingsService';
+import SettingsPanel from './components/SettingsPanel';
 
 const App: React.FC = () => {
   const [inputText, setInputText] = useState('');
@@ -50,6 +48,16 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // 전송 성공 안내를 잠깐 표시
+  const showSuccess = (message: string) => {
+    setSuccessMsg(message);
+    clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setSuccessMsg(null), 4000);
+  };
+  useEffect(() => () => clearTimeout(successTimerRef.current), []);
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem(DARK_MODE_KEY) !== 'off'
   );
@@ -75,6 +83,13 @@ const App: React.FC = () => {
   
   const [isSending, setIsSending] = useState(false);
   const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const handleSaveSettings = (settings: AppSettings) => {
+    saveSettings(settings);
+    setSettingsOpen(false);
+    loadWorkdayCountdown();
+  };
   const [todoTasks, setTodoTasks] = useState<TodoTask[]>([]);
 
   const loadWorkdayCountdown = async () => {
@@ -98,7 +113,9 @@ const App: React.FC = () => {
 
     // 2. 백그라운드에서 최신 데이터 가져와 조용히 교체
     try {
-      const result = await loadAllTasks(SCHEDULE_LIST_NAME, EXCLUDED_LISTS);
+      // 설정은 매번 새로 읽음 (폴링 타이머가 예전 설정을 붙잡지 않도록)
+      const { scheduleListName, excludedLists } = loadSettings();
+      const result = await loadAllTasks(scheduleListName, excludedLists);
       setScheduleTasks(result.scheduleTasks);
       setTodoTasks(result.todoTasks);
       localStorage.setItem(CACHE_KEY, JSON.stringify({ version: CACHE_VERSION, ...result }));
@@ -341,6 +358,10 @@ const App: React.FC = () => {
     setTasks((prev) => prev.filter((task) => task.id !== id));
   };
 
+  const handleUpdateTask = (id: string, patch: Partial<TaskDetails>) => {
+    setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, ...patch } : task)));
+  };
+
   const handleAnalyze = async () => {
     if (!inputText && attachments.length === 0) {
       setErrorMsg('분석할 텍스트를 입력하거나 파일을 업로드해주세요.');
@@ -410,30 +431,26 @@ const App: React.FC = () => {
     }
   };
 
-  // 작업 제목의 태그와 이름이 같은 캘린더로 전송, 없으면 드롭다운에서 고른 캘린더
-  // 우선순위: #기프티콘 > 필수태그(#일정/#기한/#작업)
-  const resolveCalendarId = (title: string): string => {
-    const byName = (name: string) => calendarLists.find((cal) => cal.summary === name);
-    const required = title.match(/#(일정|기한|작업)/)?.[0];
-    const calendar =
-      (title.includes('#기프티콘') ? byName('#기프티콘') : undefined) ??
-      (required ? byName(required) : undefined);
-    return calendar?.id ?? selectedCalendarId;
-  };
-
   const handleSendToBoth = async () => {
-    // Validation
-    if (!authState.isMicrosoftAuthenticated && !authState.isGoogleAuthenticated) {
+    // 현재 로그인된 서비스로만 전송
+    const services: ServiceKey[] = [
+      ...(authState.isMicrosoftAuthenticated ? (['microsoft'] as const) : []),
+      ...(authState.isGoogleAuthenticated ? (['google'] as const) : []),
+    ];
+    if (services.length === 0) {
       setErrorMsg('먼저 Microsoft 또는 Google 계정으로 로그인해주세요.');
       return;
     }
 
-    if (tasks.length === 0) {
+    // 부분 실패 후 재전송이면 이미 보낸 서비스는 건너뜀 (중복 생성 방지)
+    const msPending = authState.isMicrosoftAuthenticated ? pendingFor(tasks, 'microsoft') : [];
+    const googlePending = authState.isGoogleAuthenticated ? pendingFor(tasks, 'google') : [];
+
+    if (msPending.length === 0 && googlePending.length === 0) {
       setErrorMsg('전송할 작업이 없습니다.');
       return;
     }
-
-    if (authState.isMicrosoftAuthenticated && !selectedListId) {
+    if (msPending.length > 0 && !selectedListId) {
       setErrorMsg('To-Do 목록을 선택해주세요.');
       return;
     }
@@ -442,95 +459,44 @@ const App: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      const taskDetails: TaskDetails[] = tasks.map((task) => ({
-        title: task.title,
-        body: task.body,
-        dueDateTime: task.dueDateTime,
-        importance: task.importance,
-        reminderDateTime: task.reminderDateTime,
-        categories: task.categories,
-      }));
+      const { msSent, googleSent, msExpired } = await sendPending(
+        {
+          msPending,
+          msListId: selectedListId,
+          googlePending,
+          calendars: calendarLists,
+          fallbackCalendarId: selectedCalendarId,
+        },
+        { createTasks: createTasksInBatch, createEvents: createEventsInBatch }
+      );
 
-      // Send to both services in parallel (이름 있는 결과로 서비스별 구분)
-      const msPromise: Promise<any[]> | null =
-        authState.isMicrosoftAuthenticated && selectedListId
-          ? createTasksInBatch(selectedListId, taskDetails)
-          : null;
-
-      let googlePromise: Promise<any[]> | null = null;
-      if (authState.isGoogleAuthenticated) {
-        // Group tasks by calendar based on their tags
-        const tasksByCalendar = new Map<string, TaskDetails[]>();
-
-        taskDetails.forEach((task) => {
-          const calendarId = resolveCalendarId(task.title);
-
-          if (!tasksByCalendar.has(calendarId)) {
-            tasksByCalendar.set(calendarId, []);
-          }
-          tasksByCalendar.get(calendarId)!.push(task);
-        });
-
-        // Send each group to its corresponding calendar, flatten results
-        googlePromise = Promise.all(
-          Array.from(tasksByCalendar.entries()).map(([calendarId, tasks]) =>
-            createEventsInBatch(tasks, calendarId)
-          )
-        ).then((results) => results.flat());
+      if (msExpired) {
+        setAuthState(prev => ({
+          ...prev,
+          isMicrosoftAuthenticated: false,
+          isAuthenticated: prev.isGoogleAuthenticated,
+          userName: undefined,
+        }));
       }
 
-      const [msResult, googleResult] = await Promise.allSettled([
-        msPromise ?? Promise.resolve(null),
-        googlePromise ?? Promise.resolve(null),
-      ]);
+      // 성공 기록 → 로그인된 모든 서비스로 보낸 작업은 목록에서 제거, 나머지는 남겨 재전송
+      setTasks((prev) =>
+        removeCompleted(markSent(markSent(prev, 'microsoft', msSent), 'google', googleSent), services)
+      );
 
-      // Analyze results
-      // 거부(rejected)된 서비스는 전체 실패로 집계 — total을 0으로 두면 성공으로 오판해 작업이 지워짐
-      const total = taskDetails.length;
-      let msSuccess = 0;
-      let googleSuccess = 0;
-      let msExpired = false;
+      // 서비스별 결과 (보낼 게 없던 서비스는 생략)
+      const outcomes = [
+        { name: 'Microsoft', sent: msSent.length, total: msPending.length },
+        { name: 'Google', sent: googleSent.length, total: googlePending.length },
+      ].filter((o) => o.total > 0);
+      const allSent = outcomes.every((o) => o.sent === o.total);
 
-      if (msResult.status === 'fulfilled' && msResult.value) {
-        msSuccess = msResult.value.filter((r: any) => r.success).length;
-      } else if (msResult.status === 'rejected') {
-        if (msResult.reason instanceof Error && msResult.reason.message === 'INTERACTION_REQUIRED') {
-          msExpired = true;
-          setAuthState(prev => ({
-            ...prev,
-            isMicrosoftAuthenticated: false,
-            isAuthenticated: prev.isGoogleAuthenticated,
-            userName: undefined,
-          }));
-        }
-      }
-
-      if (googleResult.status === 'fulfilled' && googleResult.value) {
-        googleSuccess = googleResult.value.filter((r: any) => r.success).length;
-      }
-
-      // User feedback
-      const messages: string[] = [];
-      if (authState.isMicrosoftAuthenticated) {
-        messages.push(`Microsoft: ${msSuccess}/${total}`);
-      }
-      if (authState.isGoogleAuthenticated) {
-        messages.push(`Google: ${googleSuccess}/${total}`);
-      }
-
-      const allSuccess =
-        (authState.isMicrosoftAuthenticated ? msSuccess === total : true) &&
-        (authState.isGoogleAuthenticated ? googleSuccess === total : true);
-
-      if (allSuccess) {
-        setTasks([]);
+      if (allSent) {
+        showSuccess(`${outcomes.map((o) => `${o.name} ${o.sent}건`).join(' · ')} 추가됨`);
       } else {
-        const summary = `${messages.join(', ')} 성공`;
-        setErrorMsg(
-          msExpired
-            ? `Microsoft 로그인이 만료되었습니다. 다시 로그인 후 전송해주세요. (${summary})`
-            : summary
-        );
+        const counts = outcomes.map((o) => `${o.name} ${o.sent}/${o.total}건`).join(', ');
+        const summary = `${counts} 성공 — 남은 작업은 실패한 쪽으로만 다시 전송됩니다.`;
+        setErrorMsg(msExpired ? `Microsoft 로그인이 만료되었습니다. 다시 로그인 후 전송해주세요. (${summary})` : summary);
       }
     } catch (error) {
       console.error('작업 전송 실패:', error);
@@ -583,6 +549,15 @@ const App: React.FC = () => {
                   title="로그아웃"
                 >
                   <LogOut className="w-4 h-4" />
+                </button>
+              )}
+              {authState.isMicrosoftAuthenticated && (
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="p-2 text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors"
+                  title="설정"
+                >
+                  <Settings className="w-4 h-4" />
                 </button>
               )}
               <button
@@ -689,6 +664,7 @@ const App: React.FC = () => {
                     key={task.id}
                     task={task}
                     onDelete={() => handleDeleteTask(task.id)}
+                    onUpdate={(patch) => handleUpdateTask(task.id, patch)}
                   />
                 ))}
               </div>
@@ -710,6 +686,24 @@ const App: React.FC = () => {
             />
           )}
         </main>
+
+        {settingsOpen && (
+          <SettingsPanel
+            todoLists={todoLists}
+            settings={loadSettings()}
+            onSave={handleSaveSettings}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
+
+        {successMsg && (
+          <div
+            role="status"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 px-4 py-2.5 rounded-lg shadow-lg bg-emerald-600 text-white text-xs font-medium"
+          >
+            {successMsg}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -7,9 +7,13 @@ export interface TaskDetails {
   categories?: string[];
 }
 
+export type ServiceKey = 'microsoft' | 'google';
+
 export interface AnalyzedTask extends TaskDetails {
   id: string;
   createdAt: number;
+  // 서비스별 전송 완료 여부 — 부분 실패 후 재전송 시 이미 보낸 쪽은 건너뜀 (중복 생성 방지)
+  sentTo?: Partial<Record<ServiceKey, boolean>>;
 }
 
 export enum AnalysisStatus {

@@ -17,8 +17,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start Vite dev server at http://localhost:5173
 
 # Build
-npm run typecheck    # tsc --noEmit over src/ and netlify/functions/
-npm run build        # Type check + production build to dist/ (fails on any TS error)
+npm run typecheck    # tsc --noEmit over src/, netlify/functions/, tests/
+npm test             # vitest run (TZ pinned to Asia/Seoul in vitest.config.ts)
+npm run build        # Type check + tests + production build to dist/ (Netlify runs this; any failure blocks deploy)
+```
+
+Tests: `src/**/*.test.ts` and `tests/**/*.test.ts`. **Never put test files in `netlify/functions/`** — every file there is deployed as a function. Pure logic lives in `src/utils/` (`sendPlan.ts`, `taskEdit.ts`) so it can be tested without login or network.
+
+```bash
 npm run preview      # Preview production build locally
 ```
 
@@ -177,6 +183,9 @@ authState: {
 - **`netlify/functions/analyze.mts`**: AI analysis with Korean tag system and date logic (server-side)
 - **`src/services/analyzeService.ts`**: Thin client for `/api/analyze`
 - **`src/components/InputSection.tsx`**: Text/attachment input + analyze button (state lives in `App.tsx`)
+- **`src/utils/sendPlan.ts`**: Send orchestration. Each `AnalyzedTask.sentTo` records per-service success; resend only goes to services not yet sent (prevents duplicate To Do tasks after partial failure). Calendar routing by tag (`#기프티콘` > required tag > dropdown fallback)
+- **`src/services/settingsService.ts`** + **`SettingsPanel.tsx`**: Per-device settings (schedule list name, excluded lists) in localStorage; `config.ts` values are defaults. Read via `loadSettings()` at call time, not captured in state, so polling never uses stale settings
+- **API rate limits** (`config.rateLimit` in each function): `/api/analyze` 10/min, `/api/google-token` 20/min per IP. `google-token` maps Google `invalid_client` → 502 so the client treats it as transient and keeps the user's token
 - **`src/services/workdayService.ts`**: 정액분·달력·방학 계산. Keywords (`LEAVE_TITLES`, `휴업`, 방학 시작/종료) are defined once at the top and parsed by `buildScheduleContext()`; titles must match exactly
 - **`src/services/authService.ts`**: Microsoft MSAL auth singleton
 - **`src/services/googleAuthService.ts`**: Google OAuth popup flow with localStorage tokens
