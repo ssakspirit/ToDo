@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import handler from './google-token.mts';
+import handler from '../../netlify/functions/google-token.mts';
 
 const env: Record<string, string | undefined> = {};
 const post = (body: unknown) =>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import handler from './analyze.mts';
+import handler from '../../netlify/functions/analyze.mts';
 
 // Claude를 호출하기 전 단계(입력 검증)만 테스트 — 네트워크·요금 없음
 const post = (body: unknown) =>
